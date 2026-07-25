@@ -35,7 +35,10 @@ body{
   text-align:center; padding:8px; font-size:14px; font-weight:700; }
 #connBanner.show{ display:block; }
 
-#logoImg{ display:none; max-height:clamp(50px,7vh,90px); margin-bottom:14px; object-fit:contain; }
+.corner-logo{ position:fixed; top:64px; max-height:clamp(44px,6.5vh,80px); max-width:clamp(80px,13vw,160px);
+  object-fit:contain; z-index:55; opacity:.95; }
+.corner-logo.left{ left:16px; }
+.corner-logo.right{ right:16px; }
 
 .eyebrow{ font-size:clamp(12px,1.6vw,18px); font-weight:700; letter-spacing:.28em; text-transform:uppercase;
   color:var(--muted); margin-bottom:10px; }
@@ -126,23 +129,45 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
   padding:6px 14px; font-size:12px; font-weight:700; color:var(--muted); }
 #statusDot{ width:8px; height:8px; border-radius:50%; background:#ff5252; transition:background .3s; }
 #statusDot.on{ background:var(--green); box-shadow:0 0 6px var(--green); }
+
+/* Icon system (replaces emoji) */
+.icon{ width:1em; height:1em; display:inline-block; vertical-align:-0.15em; margin-right:.4em;
+  stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+.icon.icon-only{ margin-right:0; }
 </style>
 </head>
 <body>
 
-<div id="connBanner">⚠️ ขาดการเชื่อมต่อ กำลังพยายามเชื่อมต่อใหม่...</div>
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17h.01"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.7 7.7 0 0 0 0-3l2-1.4-2-3.4-2.3.8a7.7 7.7 0 0 0-2.6-1.5L14 2.5h-4l-.5 2.5a7.7 7.7 0 0 0-2.6 1.5l-2.3-.8-2 3.4 2 1.4a7.7 7.7 0 0 0 0 3l-2 1.4 2 3.4 2.3-.8a7.7 7.7 0 0 0 2.6 1.5l.5 2.5h4l.5-2.5a7.7 7.7 0 0 0 2.6-1.5l2.3.8 2-3.4-2-1.4Z"/></symbol>
+<symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19.2 6a9 9 0 0 1 0 12"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 13 6 9Z"/><path d="M10 19a2 2 0 0 0 4 0"/></symbol>
+<symbol id="i-megaphone" viewBox="0 0 24 24"><path d="M3 10v4a1 1 0 0 0 1 1h2l9 4V5L6 9H4a1 1 0 0 0-1 1Z"/><path d="M18 9.5a4 4 0 0 1 0 5"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M6 4l14 8-14 8V4Z"/></symbol>
+</svg>
+
+<div id="connBanner"><svg class="icon"><use href="#i-alert"></use></svg>ขาดการเชื่อมต่อ กำลังพยายามเชื่อมต่อใหม่...</div>
 
 <div id="tapOverlay" onclick="startDisplay()">
   <div class="eyebrow">EasyKids Robotics</div>
   <div class="brand">DRONE MISSION CHALLENGE</div>
-  <div class="tap-btn">▶ แตะเพื่อเริ่มแสดงผล</div>
+  <div class="tap-btn"><svg class="icon"><use href="#i-play"></use></svg>แตะเพื่อเริ่มแสดงผล</div>
 </div>
 
-<button id="settingsBtn" onclick="toggleSettings()">⚙️</button>
+<img id="logoLeft" class="corner-logo left" src="logos/logo-left.png" alt="" onerror="this.style.display='none'" />
+<img id="logoRight" class="corner-logo right" src="logos/logo-right.png" alt="" onerror="this.style.display='none'" />
+
+<button id="settingsBtn" onclick="toggleSettings()"><svg class="icon icon-only"><use href="#i-settings"></use></svg></button>
 <div id="settingsPanel">
-  <label>โลโก้งาน</label>
-  <input type="file" accept="image/*" onchange="loadLogoFile(this)" />
-  <label>🔊 เสียง (ฝังในเว็บแล้ว)</label>
+  <label>โลโก้ (ฝังในเว็บแล้ว)</label>
+  <div class="snd-note">
+    วางไฟล์รูปไว้ในโฟลเดอร์ <code>logos/</code> เดียวกับหน้านี้ ตั้งชื่อไฟล์เป็น<br/>
+    <code>logos/logo-left.png</code> — โลโก้มุมบนซ้าย<br/>
+    <code>logos/logo-right.png</code> — โลโก้มุมบนขวา<br/>
+    ระบบจะแสดงให้อัตโนมัติ (ถ้าไม่มีไฟล์จะไม่แสดงมุมนั้น)
+  </div>
+  <label><svg class="icon"><use href="#i-volume"></use></svg>เสียง (ฝังในเว็บแล้ว)</label>
   <div class="snd-note">
     วางไฟล์เสียงไว้ในโฟลเดอร์ <code>sounds/</code> เดียวกับหน้านี้ ตั้งชื่อไฟล์เป็น<br/>
     <code>sounds/countdown.mp3</code> (เสียงนับ 3-2-1 ครบในไฟล์เดียว เล่นครั้งเดียวตอนเริ่มนับ)<br/>
@@ -150,8 +175,8 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
     ระบบจะเรียกเล่นให้อัตโนมัติ ไม่ต้องอัปโหลดอีกต่อไป
   </div>
   <div class="snd-test">
-    <button onclick="playCountSound()">🔔 ทดสอบเสียงนับ</button>
-    <button onclick="playWhistleSound()">📯 ทดสอบเสียงนกหวีด</button>
+    <button onclick="playCountSound()"><svg class="icon"><use href="#i-bell"></use></svg>ทดสอบเสียงนับ</button>
+    <button onclick="playWhistleSound()"><svg class="icon"><use href="#i-megaphone"></use></svg>ทดสอบเสียงนกหวีด</button>
   </div>
 </div>
 <audio id="countAudio" src="sounds/countdown.mp3" preload="auto"></audio>
@@ -160,7 +185,6 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
 <div id="roomBadge">ROOM: ——</div>
 
 <div id="mainView" style="display:none;flex-direction:column;align-items:center">
-  <img id="logoImg" />
   <div class="eyebrow">EasyKids Robotics · Drone Mission Challenge</div>
   <span class="phase-lbl idle" id="phaseLbl">รอเริ่ม</span>
   <div class="team-name" id="teamNameDisp">— ทีม —</div>
@@ -207,32 +231,10 @@ function getRoomFromUrl(){
   return p.get('room');
 }
 
-/* ── Settings: logo + audio (persisted locally on this device) ── */
+/* ── Settings: audio (โลโก้ฝังตรงผ่าน src ในหน้า HTML แล้ว ไม่ต้องอัปโหลด) ── */
 function toggleSettings(){ document.getElementById('settingsPanel').classList.toggle('show'); }
-function loadLogoFile(input){
-  const f = input.files[0];
-  if(!f) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const dataUrl = e.target.result;
-    try{ localStorage.setItem('ek_drone_logo', dataUrl); }catch(_){}
-    applyLogo(dataUrl);
-  };
-  reader.readAsDataURL(f);
-}
-function applyLogo(dataUrl){
-  const img = document.getElementById('logoImg');
-  img.src = dataUrl; img.style.display = 'block';
-}
 function playCountSound(){ const a=document.getElementById('countAudio'); if(a && a.src){ a.pause(); a.currentTime=0; a.play().catch(()=>{}); } }
 function playWhistleSound(){ const a=document.getElementById('whistleAudio'); if(a && a.src){ a.pause(); a.currentTime=0; a.play().catch(()=>{}); } }
-
-window.addEventListener('DOMContentLoaded', ()=>{
-  try{
-    const saved = localStorage.getItem('ek_drone_logo');
-    if(saved) applyLogo(saved);
-  }catch(_){}
-});
 
 function startDisplay(){
   document.getElementById('tapOverlay').classList.add('hide');
