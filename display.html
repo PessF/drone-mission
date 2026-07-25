@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>EasyKids Drone Mission – Display</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;700;800;900&family=JetBrains+Mono:wght@800;900&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --text:#f7f4ff; --muted:#c9bdf5; --accent:#8c5bff; --accent-2:#00d1ff;
+  --border:rgba(255,255,255,.12); --gold:#ffd54f; --green:#69f0ae; --red:#ff5252;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{
+  color:var(--text); font-family:"Prompt",sans-serif;
+  background:
+    radial-gradient(1200px 800px at 50% -200px,#14002c,transparent 60%),
+    radial-gradient(900px 600px at 80% 10%,rgba(180,0,255,.25),transparent 40%),
+    linear-gradient(180deg,#0a0016,#05000e);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+#connBanner{ display:none; position:fixed; top:0; left:0; right:0; z-index:600; background:#b71c1c; color:#fff;
+  text-align:center; padding:8px; font-size:14px; font-weight:700; }
+#connBanner.show{ display:block; }
+
+#logoImg{ display:none; max-height:clamp(50px,7vh,90px); margin-bottom:14px; object-fit:contain; }
+
+.eyebrow{ font-size:clamp(12px,1.6vw,18px); font-weight:700; letter-spacing:.28em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:10px; }
+.brand{ font-size:clamp(20px,2.6vw,30px); font-weight:900; letter-spacing:.06em; margin-bottom:clamp(20px,4vh,50px);
+  background:linear-gradient(90deg,#fff,#dfe7ff,#a276ff); -webkit-background-clip:text; background-clip:text; color:transparent; }
+
+#roomBadge{ position:fixed; top:16px; right:18px; font-size:13px; font-weight:700; color:var(--muted);
+  background:rgba(255,255,255,.06); border:1px solid var(--border); padding:6px 14px; border-radius:20px; }
+
+#settingsBtn{ position:fixed; top:16px; left:18px; z-index:700; background:rgba(255,255,255,.06);
+  border:1px solid var(--border); color:var(--muted); width:38px; height:38px; border-radius:50%;
+  font-size:16px; cursor:pointer; }
+#settingsPanel{ display:none; position:fixed; top:62px; left:18px; z-index:700; width:280px;
+  background:rgba(20,10,40,.96); border:1px solid var(--border); border-radius:14px; padding:16px;
+  font-size:13px; }
+#settingsPanel.show{ display:block; }
+#settingsPanel label{ display:block; font-weight:700; margin:10px 0 6px; }
+#settingsPanel label:first-child{ margin-top:0; }
+#settingsPanel input[type=file]{ width:100%; font-size:11px; color:var(--muted); }
+#settingsPanel .snd-note{ font-size:11px; color:var(--muted); line-height:1.7; }
+#settingsPanel .snd-note code{ background:rgba(255,255,255,.1); padding:1px 5px; border-radius:4px; }
+#settingsPanel .snd-test{ display:flex; gap:6px; margin-top:8px; }
+#settingsPanel .snd-test button{ flex:1; background:rgba(255,255,255,.08); border:1px solid var(--border);
+  color:var(--text); padding:7px 4px; border-radius:8px; font-size:11px; font-weight:700; cursor:pointer; }
+
+.phase-lbl{ font-size:clamp(14px,2vw,22px); font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+  padding:6px 22px; border-radius:20px; margin-bottom:clamp(14px,2.5vh,26px); }
+.phase-lbl.connect{ background:rgba(230,81,0,.22); color:#ffb74d; }
+.phase-lbl.connect_paused{ background:rgba(255,213,79,.2); color:var(--gold); }
+.phase-lbl.match{ background:rgba(46,125,50,.22); color:#81c784; }
+.phase-lbl.idle{ background:rgba(255,255,255,.08); color:var(--muted); }
+.phase-lbl.done{ background:rgba(255,213,79,.18); color:var(--gold); }
+.phase-lbl.countdown{ background:rgba(140,91,255,.25); color:#c4b0ff; }
+
+.team-name{ font-size:clamp(28px,5vw,56px); font-weight:900; text-align:center; margin-bottom:clamp(14px,2vh,26px);
+  text-shadow:0 0 30px rgba(162,118,255,.4); }
+
+.big-timer{ font-family:"JetBrains Mono",monospace; font-weight:900; font-size:clamp(70px,16vw,220px); line-height:1;
+  letter-spacing:.02em; text-shadow:0 0 50px rgba(162,118,255,.5); }
+.big-timer.danger{ color:var(--red); animation:pulse .6s infinite; }
+@keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.4} }
+
+.round-lbl{ font-size:clamp(14px,2vw,20px); color:var(--muted); font-weight:700; letter-spacing:.1em; margin-top:clamp(10px,2vh,18px); }
+
+/* Score reveal */
+#scorePanel{ display:none; flex-direction:column; align-items:center; }
+#scorePanel.show{ display:flex; animation:fadeUp .5s ease; }
+@keyframes fadeUp{ from{opacity:0; transform:translateY(20px)} to{opacity:1; transform:translateY(0)} }
+.score-row{ display:flex; gap:clamp(20px,5vw,80px); margin-bottom:clamp(20px,3vh,36px); }
+.score-item{ text-align:center; }
+.score-item .sv{ font-family:"JetBrains Mono",monospace; font-size:clamp(48px,9vw,110px); font-weight:900; transition:transform .15s; }
+.score-item.autonomous .sv{ color:var(--accent-2); }
+.score-item.manual .sv{ color:var(--accent); }
+.score-item .sl{ font-size:clamp(12px,1.6vw,18px); color:var(--muted); font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-top:6px; }
+.score-total-big{ text-align:center; }
+.score-total-big .sv{ font-family:"JetBrains Mono",monospace; font-size:clamp(60px,12vw,150px); font-weight:900; color:var(--gold);
+  text-shadow:0 0 40px rgba(255,213,79,.4); transition:transform .15s; }
+.score-total-big .sl{ font-size:clamp(13px,1.8vw,20px); color:var(--muted); font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+.bump{ transform:scale(1.15); }
+
+/* Compact sizing when timer + score are both shown together (score toggled ON) */
+body.scores-on .team-name{ font-size:clamp(20px,3.2vw,34px); margin-bottom:clamp(6px,1.2vh,12px); }
+body.scores-on .phase-lbl{ margin-bottom:clamp(8px,1.5vh,16px); }
+body.scores-on .big-timer{ font-size:clamp(46px,8vw,100px); }
+body.scores-on .round-lbl{ margin-top:clamp(4px,0.8vh,8px); margin-bottom:clamp(10px,2vh,20px); }
+body.scores-on .score-row{ gap:clamp(16px,4vw,60px); margin-bottom:clamp(14px,2.4vh,26px); }
+body.scores-on .score-item .sv{ font-size:clamp(34px,6vw,72px); }
+body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
+
+/* 3-2-1 countdown overlay */
+#countdownOverlay{ display:none; position:fixed; inset:0; z-index:800; align-items:center; justify-content:center;
+  flex-direction:column; background:rgba(5,0,14,.94); }
+#countdownOverlay.show{ display:flex; }
+#countdownNum{ font-family:"JetBrains Mono",monospace; font-weight:900; font-size:clamp(140px,30vw,380px);
+  color:#fff; text-shadow:0 0 70px rgba(162,118,255,.7); animation:pop .5s ease; }
+#countdownNum.go{ color:var(--green); text-shadow:0 0 70px rgba(105,240,174,.7); }
+@keyframes pop{ from{ transform:scale(.5); opacity:0 } to{ transform:scale(1); opacity:1 } }
+#countdownSub{ font-size:clamp(14px,2vw,22px); color:var(--muted); font-weight:700; letter-spacing:.2em; text-transform:uppercase; margin-top:10px; }
+
+#tapOverlay{ display:flex; flex-direction:column; align-items:center; justify-content:center; position:fixed; inset:0;
+  z-index:490; background:linear-gradient(180deg,#090014,#030008); cursor:pointer; }
+#tapOverlay.hide{ display:none; }
+.tap-btn{ padding:16px 40px; border-radius:999px; background:linear-gradient(135deg,#a276ff,#00d1ff); color:#050010;
+  font-size:18px; font-weight:900; letter-spacing:.06em; text-transform:uppercase; box-shadow:0 0 40px rgba(162,118,255,.5); }
+
+#statusBar{ position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); left:14px; z-index:50; display:flex;
+  align-items:center; gap:8px; background:rgba(255,255,255,.08); border:1px solid var(--border); border-radius:8px;
+  padding:6px 14px; font-size:12px; font-weight:700; color:var(--muted); }
+#statusDot{ width:8px; height:8px; border-radius:50%; background:#ff5252; transition:background .3s; }
+#statusDot.on{ background:var(--green); box-shadow:0 0 6px var(--green); }
+</style>
+</head>
+<body>
+
+<div id="connBanner">⚠️ ขาดการเชื่อมต่อ กำลังพยายามเชื่อมต่อใหม่...</div>
+
+<div id="tapOverlay" onclick="startDisplay()">
+  <div class="eyebrow">EasyKids Robotics</div>
+  <div class="brand">DRONE MISSION CHALLENGE</div>
+  <div class="tap-btn">▶ แตะเพื่อเริ่มแสดงผล</div>
+</div>
+
+<button id="settingsBtn" onclick="toggleSettings()">⚙️</button>
+<div id="settingsPanel">
+  <label>โลโก้งาน</label>
+  <input type="file" accept="image/*" onchange="loadLogoFile(this)" />
+  <label>🔊 เสียง (ฝังในเว็บแล้ว)</label>
+  <div class="snd-note">
+    วางไฟล์เสียงไว้ในโฟลเดอร์ <code>sounds/</code> เดียวกับหน้านี้ ตั้งชื่อไฟล์เป็น<br/>
+    <code>sounds/countdown.mp3</code> (เสียงนับ 3-2-1 ครบในไฟล์เดียว เล่นครั้งเดียวตอนเริ่มนับ)<br/>
+    <code>sounds/whistle.mp3</code> (เสียงนกหวีดเริ่มแข่ง)<br/>
+    ระบบจะเรียกเล่นให้อัตโนมัติ ไม่ต้องอัปโหลดอีกต่อไป
+  </div>
+  <div class="snd-test">
+    <button onclick="playCountSound()">🔔 ทดสอบเสียงนับ</button>
+    <button onclick="playWhistleSound()">📯 ทดสอบเสียงนกหวีด</button>
+  </div>
+</div>
+<audio id="countAudio" src="sounds/countdown.mp3" preload="auto"></audio>
+<audio id="whistleAudio" src="sounds/whistle.mp3" preload="auto"></audio>
+
+<div id="roomBadge">ROOM: ——</div>
+
+<div id="mainView" style="display:none;flex-direction:column;align-items:center">
+  <img id="logoImg" />
+  <div class="eyebrow">EasyKids Robotics · Drone Mission Challenge</div>
+  <span class="phase-lbl idle" id="phaseLbl">รอเริ่ม</span>
+  <div class="team-name" id="teamNameDisp">— ทีม —</div>
+
+  <div id="timerView">
+    <div class="big-timer" id="bigTimer">02:00</div>
+    <div class="round-lbl" id="roundLbl">ROUND 1</div>
+  </div>
+
+  <div id="scorePanel">
+    <div class="score-row">
+      <div class="score-item autonomous"><div class="sv" id="scoreAutoDisp">0</div><div class="sl">Autonomous</div></div>
+      <div class="score-item manual"><div class="sv" id="scoreManualDisp">0</div><div class="sl">Manual</div></div>
+    </div>
+    <div class="score-total-big"><div class="sv" id="scoreTotalDisp">0</div><div class="sl">คะแนนรวม</div></div>
+  </div>
+</div>
+
+<div id="countdownOverlay">
+  <div id="countdownNum">3</div>
+  <div id="countdownSub">เตรียมตัว</div>
+</div>
+
+<div id="statusBar"><div id="statusDot"></div><span id="statusTxt">ยังไม่เชื่อมต่อ</span></div>
+
+<script>
+const HARDCODED_CFG = {
+  apiKey: "AIzaSyBNbOqXMoTzoEK9aXU4_b31z3hiixlT0eo",
+  authDomain: "easykidsdronemission.firebaseapp.com",
+  databaseURL: "https://easykidsdronemission-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "easykidsdronemission",
+  storageBucket: "easykidsdronemission.firebasestorage.app",
+  messagingSenderId: "602167577845",
+  appId: "1:602167577845:web:e49bd384959b0d493889bc",
+  measurementId: "G-NMH3VYVEKR"
+};
+
+let db=null, roomRef=null, myRoom=null;
+let rafId=null;
+let lastPhase=null, lastCountdownValue=null;
+
+function getRoomFromUrl(){
+  const p = new URLSearchParams(location.search);
+  return p.get('room');
+}
+
+/* ── Settings: logo + audio (persisted locally on this device) ── */
+function toggleSettings(){ document.getElementById('settingsPanel').classList.toggle('show'); }
+function loadLogoFile(input){
+  const f = input.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    try{ localStorage.setItem('ek_drone_logo', dataUrl); }catch(_){}
+    applyLogo(dataUrl);
+  };
+  reader.readAsDataURL(f);
+}
+function applyLogo(dataUrl){
+  const img = document.getElementById('logoImg');
+  img.src = dataUrl; img.style.display = 'block';
+}
+function playCountSound(){ const a=document.getElementById('countAudio'); if(a && a.src){ a.pause(); a.currentTime=0; a.play().catch(()=>{}); } }
+function playWhistleSound(){ const a=document.getElementById('whistleAudio'); if(a && a.src){ a.pause(); a.currentTime=0; a.play().catch(()=>{}); } }
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  try{
+    const saved = localStorage.getItem('ek_drone_logo');
+    if(saved) applyLogo(saved);
+  }catch(_){}
+});
+
+function startDisplay(){
+  document.getElementById('tapOverlay').classList.add('hide');
+  document.getElementById('mainView').style.display='flex';
+  boot();
+}
+
+function boot(){
+  myRoom = getRoomFromUrl();
+  if(!myRoom){ myRoom = prompt('กรอกรหัสสนาม (Room Code) 4 หลัก:'); }
+  if(!myRoom) return;
+  document.getElementById('roomBadge').textContent = 'ROOM: ' + myRoom;
+  if(!firebase.apps.length) firebase.initializeApp(HARDCODED_CFG);
+  db = firebase.database();
+  roomRef = db.ref(`rooms/${myRoom}`);
+
+  db.ref('.info/connected').on('value', snap=>{
+    const on = !!snap.val();
+    document.getElementById('statusDot').classList.toggle('on', on);
+    document.getElementById('statusTxt').textContent = on ? 'เชื่อมต่อแล้ว' : 'กำลังเชื่อมต่อ...';
+    document.getElementById('connBanner').classList.toggle('show', !on);
+  });
+
+  roomRef.child('team').on('value', snap=>{
+    const d = snap.val();
+    document.getElementById('teamNameDisp').textContent = (d && d.name) ? d.name : '— รอทีมถัดไป —';
+  });
+
+  roomRef.child('timer').on('value', snap=> handleTimer(snap.val()));
+
+  roomRef.child('display/scoresVisible').on('value', snap=>{
+    togglePanels(!!snap.val());
+  });
+
+  roomRef.child('liveScore').on('value', snap=>{
+    const d = snap.val();
+    if(!d) return;
+    bumpSet('scoreAutoDisp', d.autonomousScore);
+    bumpSet('scoreManualDisp', d.manualScore);
+    bumpSet('scoreTotalDisp', d.totalScore);
+  });
+}
+
+function bumpSet(id, val){
+  const el = document.getElementById(id);
+  if(el.textContent == val) return;
+  el.textContent = val;
+  el.classList.add('bump');
+  setTimeout(()=>el.classList.remove('bump'), 150);
+}
+
+function togglePanels(scoresVisible){
+  // ตัวจับเวลาแสดงตลอดเวลา — ปุ่มนี้ควบคุมแค่การแสดง/ซ่อนคะแนน ซึ่งจะโผล่ขึ้นมาอยู่ใต้ตัวจับเวลาแบบเรียลไทม์
+  document.body.classList.toggle('scores-on', scoresVisible);
+  document.getElementById('scorePanel').classList.toggle('show', scoresVisible);
+}
+
+function handleTimer(d){
+  if(!d) return;
+  const phase = d.phase || 'idle';
+
+  const badge = document.getElementById('phaseLbl');
+  badge.className = 'phase-lbl ' + phase;
+  badge.textContent =
+    phase==='idle' ? 'รอเริ่ม' :
+    phase==='connect' ? 'กำลังเชื่อมต่อโดรน' :
+    phase==='connect_paused' ? 'พร้อมแล้ว - รอเริ่มแข่ง' :
+    phase==='countdown' ? 'เตรียมตัว' :
+    phase==='match' ? 'กำลังแข่งขัน' : 'จบรอบ';
+
+  document.getElementById('roundLbl').textContent = 'ROUND ' + (d.round || 1);
+
+  const overlay = document.getElementById('countdownOverlay');
+  if(phase==='countdown'){
+    overlay.classList.add('show');
+    const n = d.countdownValue;
+    const enteringFreshCountdown = (lastPhase !== 'countdown');
+    if(n !== lastCountdownValue){
+      lastCountdownValue = n;
+      const numEl = document.getElementById('countdownNum');
+      if(n>0){
+        numEl.textContent = n; numEl.classList.remove('go');
+        document.getElementById('countdownSub').textContent = 'เตรียมตัว';
+        if(enteringFreshCountdown) playCountSound(); // เล่นครั้งเดียวตอนเริ่มนับ ไม่เล่นซ้ำทุกวินาที
+      } else {
+        numEl.textContent = 'GO!'; numEl.classList.add('go');
+        document.getElementById('countdownSub').textContent = 'เริ่มแข่งขัน!';
+        playWhistleSound();
+      }
+    }
+  } else {
+    overlay.classList.remove('show');
+    lastCountdownValue = null;
+  }
+  lastPhase = phase;
+
+  if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
+  let remaining = d.remainingMs || 0;
+  if(d.running){
+    const elapsed = Date.now() - (d.startTs || Date.now());
+    remaining = Math.max(0, remaining - elapsed);
+    const startTsLocal = Date.now(), baseMs = remaining;
+    const tick = () => {
+      const r = Math.max(0, baseMs - (Date.now()-startTsLocal));
+      renderBigTimer(r);
+      if(r>0) rafId = requestAnimationFrame(tick);
+    };
+    tick();
+  } else {
+    renderBigTimer(remaining);
+  }
+}
+function renderBigTimer(ms){
+  const s = Math.ceil(ms/1000);
+  const mm = String(Math.floor(s/60)).padStart(2,'0');
+  const ss = String(s%60).padStart(2,'0');
+  const el = document.getElementById('bigTimer');
+  el.textContent = mm+':'+ss;
+  el.classList.toggle('danger', s<=10 && s>0);
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  if(getRoomFromUrl()) startDisplay();
+});
+</script>
+</body>
+</html>

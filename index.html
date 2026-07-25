@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Drone Mission" />
+<title>Drone Mission Scoring – EasyKids Robotics</title>
+<meta name="description" content="ระบบจับเวลาและให้คะแนนแบบ Real-time สำหรับ EasyKids Drone Mission Challenge" />
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<script>
+  try { document.documentElement.dataset.theme = localStorage.getItem('ek_theme') || 'light'; }
+  catch (_) { document.documentElement.dataset.theme = 'light'; }
+</script>
+
+<style>
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+:root {
+  --purple:#7b1fa2; --purple-dk:#4a0072; --purple-md:#9c27b0; --purple-lt:#f3e5f5;
+  --dark:#1a1a2e; --card:#ffffff; --bg:#f0f2f5; --border:#dee2e6;
+  --text:#212529; --muted:#6c757d; --shadow:0 2px 12px rgba(0,0,0,.12);
+  --green:#2e7d32; --gold:#f9a825; --red:#d32f2f; --blue:#1565c0;
+  --surface-soft:#f8f9fa; --input-bg:#ffffff; --modal-bg:#ffffff;
+}
+html[data-theme="dark"] {
+  --purple:#a855f7; --purple-dk:#2d174d; --purple-md:#c084fc; --purple-lt:rgba(168,85,247,.15);
+  --dark:#0f172a; --card:#151922; --bg:#0b0f17; --border:#2b3444;
+  --text:#eef2f7; --muted:#a9b4c3; --shadow:0 2px 16px rgba(0,0,0,.45);
+  --green:#69d28f; --gold:#ffd166; --red:#ff6b6b; --blue:#64b5f6;
+  --surface-soft:#1d2430; --input-bg:#0f1520; --modal-bg:#171d29;
+}
+body { font-family:'Prompt',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+button, input, select { font-family:'Prompt',sans-serif; }
+input, select { background:var(--input-bg); color:var(--text); }
+
+/* ── Room screen ── */
+.screen { display:none; position:fixed; inset:0; z-index:1000;
+  background:linear-gradient(135deg,#2d0050 0%,#4a0072 40%,#6a1b9a 75%,#8e24aa 100%);
+  align-items:flex-start; justify-content:center; padding:20px; overflow-y:auto; }
+.screen.active { display:flex; }
+.screen-card { background:var(--card); border-radius:20px; padding:32px 36px; max-width:480px; width:100%;
+  box-shadow:0 20px 60px rgba(80,0,120,.45); margin:auto; }
+.screen-logo { text-align:center; margin-bottom:24px; }
+.screen-logo .brand { font-size:26px; font-weight:800; letter-spacing:1px; text-transform:uppercase; }
+.screen-logo .brand span { color:var(--purple-md); }
+.screen-logo .sub { font-size:13px; color:var(--muted); margin-top:6px; }
+
+.form-group { margin-bottom:14px; }
+.form-group label { display:block; font-size:14px; font-weight:700; margin-bottom:6px; }
+.form-group input, .form-group select {
+  width:100%; padding:11px 14px; border:1.5px solid var(--border); border-radius:9px; font-size:16px;
+}
+.form-group input:focus, .form-group select:focus { outline:none; border-color:var(--purple-md); }
+.form-group small { font-size:12px; color:var(--muted); margin-top:4px; display:block; }
+
+.btn-full { width:100%; padding:14px; border:none; border-radius:10px; font-size:16px; font-weight:800;
+  cursor:pointer; transition:opacity .15s, transform .1s; letter-spacing:.4px; }
+.btn-full:hover { opacity:.88; transform:translateY(-1px); }
+.btn-full.gold { background:linear-gradient(135deg,var(--purple) 0%,var(--purple-md) 100%); color:#fff; }
+.btn-full.outline { background:var(--input-bg); color:var(--purple); border:1.5px solid #ce93d8; }
+
+/* ── App shell ── */
+#app { display:none; flex-direction:column; min-height:100vh; }
+#app.active { display:flex; }
+header { background:linear-gradient(135deg,var(--dark) 0%,#16213e 100%); color:#fff; padding:12px 18px;
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap; position:sticky; top:0; z-index:200;
+  box-shadow:0 3px 16px rgba(0,0,0,.4); }
+.h-logo { font-size:19px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; white-space:nowrap; }
+.h-logo span { color:var(--gold); }
+.h-room-badge { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); padding:6px 14px;
+  border-radius:20px; font-size:13px; font-weight:700; cursor:pointer; letter-spacing:1px; }
+.h-sync { display:flex; align-items:center; gap:6px; font-size:12px; color:#c9bdf5; }
+.h-sync-dot { width:8px; height:8px; border-radius:50%; background:#ff5252; transition:background .3s; }
+.h-sync-dot.on { background:#69f0ae; box-shadow:0 0 6px #69f0ae; }
+.theme-toggle { margin-left:auto; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2);
+  color:#fff; padding:7px 14px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer;
+  display:flex; align-items:center; gap:6px; }
+
+main { flex:1; display:grid; grid-template-columns:1.15fr .85fr; gap:16px; padding:16px; max-width:1200px;
+  margin:0 auto; width:100%; }
+@media (max-width:880px) { main { grid-template-columns:1fr; } }
+
+.card { background:var(--card); border-radius:16px; box-shadow:var(--shadow); margin-bottom:16px; overflow:hidden; }
+.card-header { padding:14px 18px; font-size:15px; font-weight:700; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between; }
+.card-body { padding:16px 18px; }
+
+/* Team card */
+.round-tabs { display:flex; gap:8px; margin-bottom:12px; }
+.round-tab { flex:1; padding:10px; text-align:center; border-radius:10px; border:2px solid var(--border);
+  font-weight:700; font-size:14px; cursor:pointer; color:var(--muted); }
+.round-tab.active { border-color:var(--purple-md); background:var(--purple-lt); color:var(--purple); }
+
+/* Timer */
+.phase-badge { display:inline-block; padding:5px 14px; border-radius:20px; font-size:12px; font-weight:800;
+  letter-spacing:.5px; margin-bottom:12px; }
+.phase-badge.idle    { background:var(--surface-soft); color:var(--muted); }
+.phase-badge.connect { background:#fff3e0; color:#e65100; }
+html[data-theme="dark"] .phase-badge.connect { background:rgba(230,81,0,.18); }
+.phase-badge.match   { background:#e8f5e9; color:var(--green); }
+html[data-theme="dark"] .phase-badge.match { background:rgba(105,210,143,.15); }
+.timer-display { font-family:'Prompt',sans-serif; font-weight:800; font-size:52px; text-align:center;
+  padding:22px 6px; border-radius:14px; background:linear-gradient(135deg,var(--purple-dk) 0%,var(--purple) 60%,var(--purple-md) 100%);
+  color:#f3e5f5; letter-spacing:2px; margin-bottom:14px; box-shadow:0 4px 16px rgba(123,31,162,.35); }
+html[data-theme="dark"] .timer-display { background:linear-gradient(135deg,#141c2b,#1d2638); border:1px solid var(--border); box-shadow:none; color:#dbeafe; }
+.timer-display.danger { color:#ef5350 !important; animation:blink .6s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+.btn-row { display:flex; gap:8px; margin-bottom:8px; }
+.btn { flex:1; padding:13px; border:none; border-radius:10px; font-weight:800; font-size:14px; cursor:pointer;
+  transition:opacity .15s; }
+.btn:hover { opacity:.87; }
+.btn:disabled { opacity:.4; cursor:not-allowed; }
+.btn-success { background:linear-gradient(135deg,#2e7d32,#43a047); color:#fff; }
+.btn-danger  { background:linear-gradient(135deg,#c62828,#e53935); color:#fff; }
+.btn-purple  { background:linear-gradient(135deg,var(--purple),var(--purple-md)); color:#fff; }
+.btn-outline { background:var(--input-bg); color:var(--text); border:1.5px solid var(--border); }
+.btn-navy    { background:linear-gradient(135deg,#1a237e,#283593); color:#fff; }
+
+/* Score card */
+.score-inputs { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+.score-box label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--muted); }
+.score-box input { width:100%; font-size:30px; font-weight:800; text-align:center; padding:14px 6px;
+  border:2px solid var(--border); border-radius:12px; }
+.score-box.autonomous input:focus { border-color:var(--blue); }
+.score-box.manual input:focus { border-color:var(--purple-md); }
+.score-total { text-align:center; padding:14px; border-radius:12px; background:var(--surface-soft); margin-bottom:14px; }
+.score-total .stl { font-size:12px; color:var(--muted); font-weight:700; }
+.score-total .stn { font-size:38px; font-weight:800; color:var(--gold); }
+
+/* Rounds table */
+table.rounds-table { width:100%; border-collapse:collapse; font-size:13px; }
+table.rounds-table th, table.rounds-table td { padding:10px 6px; text-align:center; border-bottom:1px solid var(--border); }
+table.rounds-table th { color:var(--muted); font-weight:700; font-size:11px; text-transform:uppercase; }
+table.rounds-table tr.best td { font-weight:800; color:var(--green); }
+table.rounds-table td.team-cell { text-align:left; font-weight:700; }
+.del-btn { background:none; border:none; color:var(--red); cursor:pointer; font-size:16px; padding:4px; }
+.del-btn:hover { opacity:.7; }
+.empty-state { text-align:center; padding:20px; color:var(--muted); font-size:13px; }
+
+/* Countdown number preview on referee screen */
+.countdown-preview { text-align:center; font-size:64px; font-weight:900; color:var(--purple-md); padding:10px 0; }
+
+/* Toast */
+#toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px); opacity:0;
+  background:var(--dark); color:#fff; padding:12px 22px; border-radius:10px; font-size:14px; font-weight:700;
+  z-index:3000; transition:opacity .25s, transform .25s; pointer-events:none; box-shadow:0 8px 24px rgba(0,0,0,.3); }
+#toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ══ ROOM SCREEN ══ -->
+<div class="screen active" id="screenRoom">
+  <div class="screen-card">
+    <div class="screen-logo">
+      <div class="brand">EASY<span>KIDS</span> Robotics</div>
+      <div class="sub">Drone Mission Challenge — ระบบจับเวลา &amp; ให้คะแนน</div>
+    </div>
+
+    <div class="form-group">
+      <label>รหัสสนาม / Room Code (4 หลัก)</label>
+      <div style="display:flex;gap:8px">
+        <input id="roomInput" maxlength="4" placeholder="เช่น 1201"
+          style="flex:1;letter-spacing:6px;font-weight:800;font-size:22px;text-align:center"
+          oninput="this.value=this.value.replace(/[^0-9]/g,'')" onkeydown="if(event.key==='Enter')joinRoom()" />
+        <button class="btn-full gold" style="width:auto;padding:0 16px" onclick="genRoomCode()">สุ่ม</button>
+      </div>
+      <small>ใช้แยกแต่ละสนามที่แข่งพร้อมกัน — กรรมการและจอแสดงผลของสนามเดียวกันต้องใช้รหัสเดียวกัน</small>
+    </div>
+
+    <button class="btn-full gold" onclick="joinRoom()">เข้าสู่ห้องแข่งขัน</button>
+    <div style="height:8px"></div>
+    <button class="btn-full outline" onclick="window.open('display.html'+(document.getElementById('roomInput').value?('?room='+document.getElementById('roomInput').value):''),'_blank')">🖥️ เปิดหน้าจอแสดงผล (Display)</button>
+  </div>
+</div>
+
+<!-- ══ MAIN APP ══ -->
+<div id="app">
+  <header>
+    <div class="h-logo">EASY<span>KIDS</span> · DRONE MISSION</div>
+    <div class="h-room-badge" id="headerRoom" onclick="copyRoomCode()" title="คลิกเพื่อคัดลอก">ROOM: ——</div>
+    <div class="h-sync"><div class="h-sync-dot" id="syncDot"></div><span id="syncTxt">กำลังเชื่อมต่อ...</span></div>
+    <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">🌙</span><span id="themeLabel">Dark Mode</span></button>
+  </header>
+
+  <main>
+    <!-- LEFT COLUMN -->
+    <div>
+      <!-- Team & round card -->
+      <div class="card">
+        <div class="card-header">🚁 ทีมที่กำลังแข่ง</div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>ชื่อทีม</label>
+            <input id="teamNameInput" placeholder="กรอกชื่อทีม" oninput="onTeamNameInput(this.value)" />
+          </div>
+          <div class="round-tabs">
+            <div class="round-tab active" id="tabRound1" onclick="selectRound(1)">Round 1</div>
+            <div class="round-tab" id="tabRound2" onclick="selectRound(2)">Round 2</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Timer card -->
+      <div class="card">
+        <div class="card-header">⏱️ ตัวจับเวลา</div>
+        <div class="card-body">
+          <span class="phase-badge idle" id="phaseBadge">รอเริ่ม</span>
+          <div class="timer-display" id="timerDisplay">02:00</div>
+          <div class="btn-row">
+            <button class="btn btn-success" id="btnPhaseAction" onclick="phaseAction()">▶ เริ่มนับเวลาเชื่อมต่อ (2:00)</button>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-outline" id="btnPauseResume" onclick="pauseResumeMatch()" style="display:none">⏸ หยุดชั่วคราว</button>
+            <button class="btn btn-outline" onclick="resetPhase()">↺ รีเซ็ต (รอบใหม่)</button>
+          </div>
+          <p style="font-size:12px;color:var(--muted);line-height:1.8;margin-top:6px">
+            1) กด "เริ่มนับเวลาเชื่อมต่อ" → 2) ถ้าเด็กเชื่อมต่อทันภายใน 2 นาที กด "หยุด" เพื่อให้เด็กเข้าประจำที่ →
+            3) กด "เริ่มแข่งขัน" ระบบจะนับ 3-2-1 แล้วเริ่มจับเวลา 8 นาทีให้อัตโนมัติ<br/>
+            (ถ้าเชื่อมต่อไม่ทัน 2 นาที ระบบจะนับ 3-2-1 แล้วเริ่มแข่ง 8 นาทีให้เองทันทีที่ครบเวลา)
+          </p>
+        </div>
+      </div>
+
+      <!-- Score card -->
+      <div class="card">
+        <div class="card-header">🏁 กรอกคะแนน — <span id="scoreRoundLbl">Round 1</span></div>
+        <div class="card-body">
+          <div class="score-inputs">
+            <div class="score-box autonomous">
+              <label>Autonomous (0–50)</label>
+              <input type="number" id="scoreAuto" min="0" max="50" value="0" oninput="onScoreInput()" />
+            </div>
+            <div class="score-box manual">
+              <label>Manual (0–50)</label>
+              <input type="number" id="scoreManual" min="0" max="50" value="0" oninput="onScoreInput()" />
+            </div>
+          </div>
+          <div class="score-total">
+            <div class="stl">คะแนนรวม</div>
+            <div class="stn" id="scoreTotal">0</div>
+          </div>
+          <button class="btn-full gold" onclick="saveRound()">💾 บันทึกคะแนนรอบนี้</button>
+        </div>
+      </div>
+
+      <!-- Rounds history -->
+      <div class="card">
+        <div class="card-header">📋 ผลคะแนน (ห้องนี้)</div>
+        <div class="card-body" style="padding:0 18px 18px">
+          <table class="rounds-table">
+            <thead><tr><th>ทีม</th><th>Round</th><th>Autonomous</th><th>Manual</th><th>รวม</th><th>เวลาที่ใช้</th><th></th></tr></thead>
+            <tbody id="roundsBody"><tr><td colspan="7" class="empty-state">ยังไม่มีข้อมูล</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div>
+      <div class="card">
+        <div class="card-header">📺 ควบคุมจอแสดงผล</div>
+        <div class="card-body">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:10px">ส่งชื่อทีม/เวลา/คะแนน ขึ้นจอสาธารณะแบบเรียลไทม์ — ตัวจับเวลาโชว์อยู่บนจอตลอด ส่วนคะแนนจะอัปเดตทันทีที่กรอกด้านซ้าย ปุ่มด้านล่างใช้แค่โชว์/ซ่อนคะแนนใต้ตัวจับเวลา</p>
+          <button class="btn-full gold" id="btnScoreToggle" style="margin-bottom:8px" onclick="toggleScoreDisplay()">📺 โชว์คะแนนขึ้นจอ</button>
+          <button class="btn-full outline" onclick="openDisplay()">🖥️ เปิดหน้าจอแสดงผล</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">🔊 เสียง (ฝังในเว็บแล้ว)</div>
+        <div class="card-body">
+          <p style="font-size:12px;color:var(--muted);line-height:1.9;margin-bottom:12px">
+            วางไฟล์เสียงไว้ในโฟลเดอร์ <code>sounds/</code> เดียวกับไฟล์เว็บนี้ ตั้งชื่อไฟล์เป็น<br/>
+            <code>sounds/countdown.mp3</code> — เสียงนับ 3-2-1 ทั้งหมดในไฟล์เดียว (ยาวประมาณ 3 วิ) ระบบจะเล่นครั้งเดียวตอนเริ่มนับ<br/>
+            <code>sounds/whistle.mp3</code> — เสียงนกหวีดเริ่มแข่ง<br/>
+            ระบบจะเรียกเล่นให้อัตโนมัติ ไม่ต้องอัปโหลดไฟล์อีกต่อไป (ทำแบบเดียวกันกับหน้า Display ด้วย)
+          </p>
+          <div class="btn-row" style="margin-bottom:0">
+            <button class="btn btn-outline" onclick="playCountSound()">🔔 ทดสอบเสียงนับ</button>
+            <button class="btn btn-outline" onclick="playWhistleSound()">📯 ทดสอบเสียงนกหวีด</button>
+          </div>
+          <audio id="countAudio" src="sounds/countdown.mp3" preload="auto"></audio>
+          <audio id="whistleAudio" src="sounds/whistle.mp3" preload="auto"></audio>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">ℹ️ กติกาโดยย่อ</div>
+        <div class="card-body" style="font-size:13px;color:var(--muted);line-height:1.9">
+          • เตรียม/เชื่อมต่อโดรน 2 นาที ก่อนเริ่มแข่ง<br/>
+          • เวลาแข่งจริง 8 นาที (480 วินาที) ต่อรอบ<br/>
+          • แข่งได้ 2 รอบ ใช้คะแนนที่ดีที่สุดจัดอันดับ<br/>
+          • คะแนนเต็ม: Autonomous 50 + Manual 50 = 100<br/>
+          • เสมอกัน ตัดสินด้วยเวลารวม → คะแนน Autonomous → เวลา Autonomous → คะแนน Manual → เวลา Manual
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ══════════ CONFIG — แก้ค่า Firebase ของคุณตรงนี้ ══════════ */
+const HARDCODED_CFG = {
+  apiKey: "AIzaSyBNbOqXMoTzoEK9aXU4_b31z3hiixlT0eo",
+  authDomain: "easykidsdronemission.firebaseapp.com",
+  databaseURL: "https://easykidsdronemission-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "easykidsdronemission",
+  storageBucket: "easykidsdronemission.firebasestorage.app",
+  messagingSenderId: "602167577845",
+  appId: "1:602167577845:web:e49bd384959b0d493889bc",
+  measurementId: "G-NMH3VYVEKR"
+};
+/* ═══════════════════════════════════════════════════════════ */
+
+const CONNECT_MS = 2 * 60 * 1000;
+const MATCH_MS = 8 * 60 * 1000;
+
+let db=null, roomRef=null, myRoom=null;
+let curRound = 1;
+let teamName = '';
+let scoresVisible = false;
+
+/* ── Room / init ── */
+function genRoomCode(){ document.getElementById('roomInput').value = String(Math.floor(1000+Math.random()*9000)); }
+
+function joinRoom(){
+  const code = document.getElementById('roomInput').value.trim();
+  if(!/^\d{4}$/.test(code)){ toast('กรุณากรอกรหัสสนาม 4 หลัก'); return; }
+  myRoom = code;
+  initFirebase(HARDCODED_CFG);
+  document.getElementById('screenRoom').classList.remove('active');
+  document.getElementById('app').classList.add('active');
+  document.getElementById('headerRoom').textContent = 'ROOM: ' + myRoom;
+}
+
+function copyRoomCode(){
+  if(!myRoom) return;
+  navigator.clipboard?.writeText(myRoom).then(()=>toast('คัดลอกรหัสห้องแล้ว'));
+}
+
+function initFirebase(cfg){
+  try{
+    if(!firebase.apps.length) firebase.initializeApp(cfg);
+    db = firebase.database();
+    roomRef = db.ref(`rooms/${myRoom}`);
+    db.ref('.info/connected').on('value', snap=>{
+      const on = !!snap.val();
+      document.getElementById('syncDot').classList.toggle('on', on);
+      document.getElementById('syncTxt').textContent = on ? 'เชื่อมต่อแล้ว' : 'กำลังเชื่อมต่อ...';
+    });
+    listenTeam();
+    pushRoundState();
+    roomRef.child('display/scoresVisible').on('value', snap=>{
+      scoresVisible = !!snap.val();
+      updateScoreToggleBtn();
+    });
+  }catch(e){ toast('ตั้งค่า Firebase ไม่ถูกต้อง กรุณาตรวจสอบ HARDCODED_CFG'); console.error(e); }
+}
+
+/* ── Audio (ฝังไฟล์ไว้ใน sounds/countdown.mp3 และ sounds/whistle.mp3) ── */
+function playCountSound(){ const a=document.getElementById('countAudio'); if(a && a.src){ a.pause(); a.currentTime=0; a.play().catch(()=>{}); } }
+function playWhistleSound(){ const a=document.getElementById('whistleAudio'); if(a && a.src){ a.pause(); a.currentTime=0; a.play().catch(()=>{}); } }
+
+/* ── Team name ── */
+let teamNameDebounce=null;
+function onTeamNameInput(v){
+  teamName = v;
+  clearTimeout(teamNameDebounce);
+  teamNameDebounce = setTimeout(()=>{
+    if(roomRef) roomRef.child('team').set({name:v}).catch(()=>{});
+  }, 300);
+}
+function listenTeam(){
+  roomRef.child('team').on('value', snap=>{
+    const d = snap.val();
+    if(d && d.name!==undefined && document.activeElement.id!=='teamNameInput'){
+      document.getElementById('teamNameInput').value = d.name;
+      teamName = d.name;
+    }
+    refreshRoundsTable();
+  });
+}
+
+/* ── Round tabs ── */
+function selectRound(r){
+  curRound = r;
+  document.getElementById('tabRound1').classList.toggle('active', r===1);
+  document.getElementById('tabRound2').classList.toggle('active', r===2);
+  document.getElementById('scoreRoundLbl').textContent = 'Round '+r;
+  loadRoundIntoInputs(r);
+  pushRoundState();
+}
+function pushRoundState(){
+  // อัปเดตรอบที่กำลังแข่งขึ้น Firebase ทันทีแบบเรียลไทม์ (ไม่ต้องรอกดปุ่มจับเวลา)
+  if(roomRef) roomRef.child('timer').update({ round: curRound }).catch(()=>{});
+}
+
+/* ── Timer state machine ── */
+/* phase: idle | connect | connect_paused | countdown | match | done */
+let phase='idle';
+let running=false;
+let remainingMs=CONNECT_MS;
+let startTs=0, baseMs=0, rafId=null;
+let countdownValue=0, countdownIv=null;
+
+function renderTimer(){
+  const el = document.getElementById('timerDisplay');
+  const badge = document.getElementById('phaseBadge');
+
+  if(phase==='countdown'){
+    el.textContent = countdownValue>0 ? String(countdownValue) : 'GO!';
+    el.classList.remove('danger');
+    badge.className = 'phase-badge connect';
+    badge.textContent = 'เตรียมตัว...';
+    return;
+  }
+
+  const totalSec = Math.ceil(remainingMs/1000);
+  const mm = String(Math.floor(totalSec/60)).padStart(2,'0');
+  const ss = String(totalSec%60).padStart(2,'0');
+  el.textContent = mm+':'+ss;
+  el.classList.toggle('danger', running && totalSec<=10 && totalSec>0);
+
+  badge.className = 'phase-badge ' + (phase==='idle'?'idle':(phase==='connect'||phase==='connect_paused')?'connect':'match');
+  badge.textContent =
+    phase==='idle' ? 'รอเริ่ม' :
+    phase==='connect' ? 'กำลังเชื่อมต่อโดรน' :
+    phase==='connect_paused' ? 'พร้อมแล้ว - รอกดเริ่มแข่ง' :
+    phase==='match' ? 'กำลังแข่งขัน' : 'จบรอบ';
+}
+
+function loop(){
+  if(!running) return;
+  remainingMs = Math.max(0, baseMs - (Date.now()-startTs));
+  if(remainingMs<=0){
+    remainingMs=0; renderTimer();
+    if(phase==='connect'){ haltTimer(); startCountdown321(); return; }
+    if(phase==='match'){ haltTimer(); phase='done'; pushTimerState(); renderTimer(); updateActionButton(); toast('⏰ หมดเวลาแข่งขัน'); return; }
+  }
+  renderTimer();
+  rafId = requestAnimationFrame(loop);
+}
+function runTimer(){ startTs=Date.now(); baseMs=remainingMs; running=true; rafId=requestAnimationFrame(loop); pushTimerState(); }
+function haltTimer(){ if(rafId) cancelAnimationFrame(rafId); rafId=null; running=false; }
+
+function updateActionButton(){
+  const btn = document.getElementById('btnPhaseAction');
+  const pr = document.getElementById('btnPauseResume');
+  if(phase==='idle'){
+    btn.textContent='▶ เริ่มนับเวลาเชื่อมต่อ (2:00)'; btn.className='btn btn-success'; btn.disabled=false; pr.style.display='none';
+  } else if(phase==='connect'){
+    btn.textContent='⏸ หยุด (เด็กเชื่อมต่อสำเร็จ)'; btn.className='btn btn-purple'; btn.disabled=false; pr.style.display='none';
+  } else if(phase==='connect_paused'){
+    btn.textContent='🚀 เริ่มแข่งขัน (นับ 3-2-1)'; btn.className='btn btn-success'; btn.disabled=false; pr.style.display='none';
+  } else if(phase==='countdown'){
+    btn.textContent='⏳ กำลังนับถอยหลัง...'; btn.className='btn btn-outline'; btn.disabled=true; pr.style.display='none';
+  } else if(phase==='match'){
+    btn.textContent='⏹ จบรอบทันที'; btn.className='btn btn-danger'; btn.disabled=false;
+    pr.style.display='block'; pr.textContent = running ? '⏸ หยุดชั่วคราว' : '▶ ทำงานต่อ';
+  } else {
+    btn.textContent='รอบนี้จบแล้ว — กด "รีเซ็ต" เพื่อเริ่มรอบใหม่'; btn.className='btn btn-outline'; btn.disabled=true; pr.style.display='none';
+  }
+}
+
+function phaseAction(){
+  if(phase==='idle'){ phase='connect'; remainingMs=CONNECT_MS; runTimer(); }
+  else if(phase==='connect'){ haltTimer(); phase='connect_paused'; pushTimerState(); }
+  else if(phase==='connect_paused'){ startCountdown321(); }
+  else if(phase==='match'){ haltTimer(); phase='done'; pushTimerState(); }
+  renderTimer(); updateActionButton();
+}
+
+function startCountdown321(){
+  phase='countdown';
+  updateActionButton();
+  let n=3;
+  countdownValue=n;
+  pushCountdownState(n);
+  playCountSound(); // เล่นเสียงนับครั้งเดียวตอนเริ่ม 3-2-1 — ไฟล์เสียงมีคำนับครบอยู่แล้ว ไม่เล่นซ้ำทุกวินาที
+  renderTimer();
+  countdownIv = setInterval(()=>{
+    n--;
+    if(n>0){
+      countdownValue=n; pushCountdownState(n); renderTimer();
+    } else {
+      clearInterval(countdownIv); countdownIv=null;
+      countdownValue=0; pushCountdownState(0);
+      playWhistleSound();
+      startMatchPhase();
+    }
+  },1000);
+}
+function pushCountdownState(n){
+  if(!roomRef) return;
+  roomRef.child('timer').update({ phase:'countdown', countdownValue:n, team:teamName, round:curRound }).catch(()=>{});
+}
+
+function startMatchPhase(){
+  haltTimer();
+  phase='match'; remainingMs=MATCH_MS; runTimer();
+  renderTimer(); updateActionButton();
+  toast('🚀 เริ่มการแข่งขัน 8 นาที');
+}
+function pauseResumeMatch(){
+  if(phase!=='match') return;
+  if(running){ haltTimer(); pushTimerState(); }
+  else { runTimer(); }
+  updateActionButton();
+}
+function resetPhase(){
+  if(countdownIv){ clearInterval(countdownIv); countdownIv=null; }
+  haltTimer();
+  phase='idle'; remainingMs=CONNECT_MS; countdownValue=0;
+  pushTimerState(); renderTimer(); updateActionButton();
+}
+
+function pushTimerState(){
+  if(!roomRef) return;
+  roomRef.child('timer').set({
+    phase, running, startTs, remainingMs: Math.max(0, remainingMs|0), countdownValue: countdownValue||0,
+    team: teamName, round: curRound,
+  }).catch(()=>{});
+}
+
+/* ── Score entry ── */
+function clamp50(v){ v=parseInt(v)||0; return Math.max(0, Math.min(50, v)); }
+let liveScoreDebounce=null;
+function onScoreInput(){
+  const a = clamp50(document.getElementById('scoreAuto').value);
+  const m = clamp50(document.getElementById('scoreManual').value);
+  document.getElementById('scoreTotal').textContent = a+m;
+  clearTimeout(liveScoreDebounce);
+  liveScoreDebounce = setTimeout(()=>{
+    if(roomRef) roomRef.child('liveScore').set({
+      autonomousScore:a, manualScore:m, totalScore:a+m, team:teamName, round:curRound, updatedAt:Date.now()
+    }).catch(()=>{});
+  }, 250);
+}
+
+function saveRound(){
+  if(!roomRef){ toast('กรุณาเข้าห้องก่อน'); return; }
+  if(!teamName){ toast('กรุณากรอกชื่อทีมก่อน'); return; }
+  const a = clamp50(document.getElementById('scoreAuto').value);
+  const m = clamp50(document.getElementById('scoreManual').value);
+  const total = a+m;
+  const matchTimeUsedMs = (phase==='match' || phase==='done') ? Math.max(0, MATCH_MS - remainingMs) : 0;
+  const entry = { team: teamName, autonomousScore:a, manualScore:m, totalScore:total, matchTimeUsedMs, submittedAt: Date.now() };
+  roomRef.child(`teams_rounds/${sanitizeKey(teamName)}/round${curRound}`).set(entry)
+    .then(()=>{ toast('💾 บันทึกคะแนน Round '+curRound+' แล้ว'); refreshRoundsTable(); })
+    .catch(()=>toast('บันทึกไม่สำเร็จ'));
+}
+function sanitizeKey(s){ return (s||'team').replace(/[.#$/\[\]]/g,'_'); }
+
+function loadRoundIntoInputs(r){
+  if(!roomRef || !teamName){ document.getElementById('scoreAuto').value=0; document.getElementById('scoreManual').value=0; onScoreInput(); return; }
+  roomRef.child(`teams_rounds/${sanitizeKey(teamName)}/round${r}`).once('value').then(snap=>{
+    const d = snap.val();
+    document.getElementById('scoreAuto').value = d ? d.autonomousScore : 0;
+    document.getElementById('scoreManual').value = d ? d.manualScore : 0;
+    onScoreInput();
+  });
+}
+
+function refreshRoundsTable(){
+  if(!roomRef || !teamName){
+    document.getElementById('roundsBody').innerHTML = '<tr><td colspan="7" class="empty-state">ยังไม่มีข้อมูล</td></tr>';
+    return;
+  }
+  roomRef.child(`teams_rounds/${sanitizeKey(teamName)}`).once('value').then(snap=>{
+    const d = snap.val() || {};
+    const rows = [];
+    [[1,d.round1],[2,d.round2]].forEach(([n,rd])=>{ if(rd) rows.push({n, ...rd}); });
+    const tbody = document.getElementById('roundsBody');
+    if(rows.length===0){ tbody.innerHTML = '<tr><td colspan="7" class="empty-state">ยังไม่มีข้อมูล</td></tr>'; return; }
+    const bestIdx = rows.reduce((bi,r,i,arr)=> r.totalScore > arr[bi].totalScore ? i : bi, 0);
+    tbody.innerHTML = rows.map((r,i)=>`
+      <tr class="${i===bestIdx?'best':''}">
+        <td class="team-cell">${escapeHtml(r.team || teamName)}</td>
+        <td>Round ${r.n}${i===bestIdx?' 🏆':''}</td>
+        <td>${r.autonomousScore}</td>
+        <td>${r.manualScore}</td>
+        <td>${r.totalScore}</td>
+        <td>${((r.matchTimeUsedMs||0)/1000).toFixed(1)}s</td>
+        <td><button class="del-btn" onclick="confirmDeleteRound(${r.n})" title="ลบ">🗑️</button></td>
+      </tr>`).join('');
+  });
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function confirmDeleteRound(n){
+  if(!teamName) return;
+  if(!confirm(`ยืนยันลบคะแนน Round ${n} ของทีม "${teamName}" ใช่หรือไม่?\nการลบไม่สามารถย้อนกลับได้`)) return;
+  roomRef.child(`teams_rounds/${sanitizeKey(teamName)}/round${n}`).remove()
+    .then(()=>{ toast('ลบคะแนน Round '+n+' แล้ว'); refreshRoundsTable(); if(curRound===n) loadRoundIntoInputs(n); })
+    .catch(()=>toast('ลบไม่สำเร็จ'));
+}
+
+/* ── Display push ── */
+function updateScoreToggleBtn(){
+  const b = document.getElementById('btnScoreToggle');
+  if(!b) return;
+  b.textContent = scoresVisible ? '🙈 ซ่อนคะแนนบนจอ' : '📺 โชว์คะแนนขึ้นจอ';
+  b.className = scoresVisible ? 'btn-full outline' : 'btn-full gold';
+}
+function toggleScoreDisplay(){ pushScoreToDisplay(!scoresVisible); }
+function pushScoreToDisplay(visible){
+  if(!roomRef){ toast('กรุณาเข้าห้องก่อน'); return; }
+  roomRef.child('display').update({ scoresVisible: visible, pushedAt: Date.now() })
+    .then(()=>toast(visible ? '📺 โชว์คะแนนขึ้นจอแล้ว' : '🙈 ซ่อนคะแนนบนจอแล้ว'))
+    .catch(()=>toast('ส่งข้อมูลไม่สำเร็จ'));
+}
+function openDisplay(){
+  if(!myRoom){ toast('กรุณาเข้าห้องก่อน'); return; }
+  window.open(`display.html?room=${encodeURIComponent(myRoom)}`, '_blank', 'noopener,noreferrer');
+}
+
+/* ── Theme ── */
+function toggleTheme(){
+  const cur = document.documentElement.dataset.theme;
+  const next = cur==='dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try{ localStorage.setItem('ek_theme', next); }catch(_){}
+  document.getElementById('themeIcon').textContent = next==='dark' ? '☀️' : '🌙';
+  document.getElementById('themeLabel').textContent = next==='dark' ? 'Light Mode' : 'Dark Mode';
+}
+window.addEventListener('DOMContentLoaded', ()=>{
+  const cur = document.documentElement.dataset.theme;
+  document.getElementById('themeIcon').textContent = cur==='dark' ? '☀️' : '🌙';
+  document.getElementById('themeLabel').textContent = cur==='dark' ? 'Light Mode' : 'Dark Mode';
+});
+
+/* ── Toast ── */
+let toastTimer=null;
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 2200);
+}
+
+renderTimer(); updateActionButton();
+</script>
+</body>
+</html>
