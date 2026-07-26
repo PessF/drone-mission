@@ -12,7 +12,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;700;800;900&family=JetBrains+Mono:wght@800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;700;800;900&display=swap" rel="stylesheet">
 
 <style>
 :root {
@@ -76,7 +76,7 @@ body{
 .team-name{ font-size:clamp(28px,5vw,56px); font-weight:900; text-align:center; margin-bottom:clamp(14px,2vh,26px);
   text-shadow:0 0 30px rgba(162,118,255,.4); }
 
-.big-timer{ font-family:"JetBrains Mono",monospace; font-weight:900; font-size:clamp(70px,16vw,220px); line-height:1;
+.big-timer{ font-family:"Prompt",sans-serif; font-weight:900; font-size:clamp(70px,16vw,220px); line-height:1;
   letter-spacing:.02em; text-shadow:0 0 50px rgba(162,118,255,.5); }
 .big-timer.danger{ color:var(--red); animation:pulse .6s infinite; }
 @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.4} }
@@ -89,12 +89,12 @@ body{
 @keyframes fadeUp{ from{opacity:0; transform:translateY(20px)} to{opacity:1; transform:translateY(0)} }
 .score-row{ display:flex; gap:clamp(20px,5vw,80px); margin-bottom:clamp(20px,3vh,36px); }
 .score-item{ text-align:center; }
-.score-item .sv{ font-family:"JetBrains Mono",monospace; font-size:clamp(48px,9vw,110px); font-weight:900; transition:transform .15s; }
+.score-item .sv{ font-family:"Prompt",sans-serif; font-size:clamp(48px,9vw,110px); font-weight:900; transition:transform .15s; }
 .score-item.autonomous .sv{ color:var(--accent-2); }
 .score-item.manual .sv{ color:var(--accent); }
 .score-item .sl{ font-size:clamp(12px,1.6vw,18px); color:var(--muted); font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-top:6px; }
 .score-total-big{ text-align:center; }
-.score-total-big .sv{ font-family:"JetBrains Mono",monospace; font-size:clamp(60px,12vw,150px); font-weight:900; color:var(--gold);
+.score-total-big .sv{ font-family:"Prompt",sans-serif; font-size:clamp(60px,12vw,150px); font-weight:900; color:var(--gold);
   text-shadow:0 0 40px rgba(255,213,79,.4); transition:transform .15s; }
 .score-total-big .sl{ font-size:clamp(13px,1.8vw,20px); color:var(--muted); font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
 .bump{ transform:scale(1.15); }
@@ -112,7 +112,7 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
 #countdownOverlay{ display:none; position:fixed; inset:0; z-index:800; align-items:center; justify-content:center;
   flex-direction:column; background:rgba(5,0,14,.94); }
 #countdownOverlay.show{ display:flex; }
-#countdownNum{ font-family:"JetBrains Mono",monospace; font-weight:900; font-size:clamp(140px,30vw,380px);
+#countdownNum{ font-family:"Prompt",sans-serif; font-weight:900; font-size:clamp(140px,30vw,380px);
   color:#fff; text-shadow:0 0 70px rgba(162,118,255,.7); animation:pop .5s ease; }
 #countdownNum.go{ color:var(--green); text-shadow:0 0 70px rgba(105,240,174,.7); }
 @keyframes pop{ from{ transform:scale(.5); opacity:0 } to{ transform:scale(1); opacity:1 } }
@@ -123,6 +123,21 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
 #tapOverlay.hide{ display:none; }
 .tap-btn{ padding:16px 40px; border-radius:999px; background:linear-gradient(135deg,#a276ff,#00d1ff); color:#050010;
   font-size:18px; font-weight:900; letter-spacing:.06em; text-transform:uppercase; box-shadow:0 0 40px rgba(162,118,255,.5); }
+
+#roomEntryOverlay{ display:none; flex-direction:column; align-items:center; justify-content:center; position:fixed; inset:0;
+  z-index:495; background:linear-gradient(180deg,#090014,#030008); padding:20px; text-align:center; }
+#roomEntryOverlay.show{ display:flex; }
+#roomEntryOverlay .prompt-lbl{ font-size:clamp(14px,2vw,18px); color:var(--muted); font-weight:700; letter-spacing:.08em;
+  margin:22px 0 14px; }
+#roomCodeInput{ width:min(260px,80vw); text-align:center; font-family:"Prompt",sans-serif; font-size:26px; font-weight:800;
+  letter-spacing:.12em; padding:14px 10px; border-radius:12px; border:2px solid var(--border); background:rgba(255,255,255,.06);
+  color:var(--text); }
+#roomCodeInput:focus{ outline:none; border-color:var(--accent); }
+#roomEntrySubmit{ margin-top:16px; padding:14px 40px; border-radius:999px; border:none; cursor:pointer;
+  background:linear-gradient(135deg,#a276ff,#00d1ff); color:#050010; font-family:"Prompt",sans-serif;
+  font-size:16px; font-weight:900; letter-spacing:.06em; text-transform:uppercase; }
+#roomCodeError{ display:none; color:var(--red); font-size:13px; font-weight:700; margin-top:12px; }
+#roomCodeError.show{ display:block; }
 
 #statusBar{ position:fixed; bottom:calc(12px + env(safe-area-inset-bottom)); left:14px; z-index:50; display:flex;
   align-items:center; gap:8px; background:rgba(255,255,255,.08); border:1px solid var(--border); border-radius:8px;
@@ -153,6 +168,16 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
   <div class="eyebrow">EasyKids Robotics</div>
   <div class="brand">DRONE MISSION CHALLENGE</div>
   <div class="tap-btn"><svg class="icon"><use href="#i-play"></use></svg>แตะเพื่อเริ่มแสดงผล</div>
+</div>
+
+<div id="roomEntryOverlay">
+  <div class="eyebrow">EasyKids Robotics</div>
+  <div class="brand">DRONE MISSION CHALLENGE</div>
+  <div class="prompt-lbl">กรอกรหัสสนาม (Room Code) เพื่อเข้าใช้งาน</div>
+  <input id="roomCodeInput" type="text" inputmode="numeric" maxlength="8" placeholder="เช่น 1234"
+    onkeydown="if(event.key==='Enter') submitRoomCode()" />
+  <button id="roomEntrySubmit" onclick="submitRoomCode()">เข้าสู่ระบบ</button>
+  <div id="roomCodeError">กรุณากรอกรหัสสนามก่อนเข้าใช้งาน</div>
 </div>
 
 <img id="logoLeft" class="corner-logo left" src="logos/logo-left.png" alt="" onerror="this.style.display='none'" />
@@ -186,7 +211,7 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
 
 <div id="mainView" style="display:none;flex-direction:column;align-items:center">
   <div class="eyebrow">EasyKids Robotics · Drone Mission Challenge</div>
-  <span class="phase-lbl idle" id="phaseLbl">รอเริ่ม</span>
+  <span class="phase-lbl idle" id="phaseLbl">พร้อมเริ่ม</span>
   <div class="team-name" id="teamNameDisp">— ทีม —</div>
 
   <div id="timerView">
@@ -238,13 +263,33 @@ function playWhistleSound(){ const a=document.getElementById('whistleAudio'); if
 
 function startDisplay(){
   document.getElementById('tapOverlay').classList.add('hide');
-  document.getElementById('mainView').style.display='flex';
-  boot();
+  const urlRoom = getRoomFromUrl();
+  if(urlRoom){
+    document.getElementById('mainView').style.display='flex';
+    boot(urlRoom);
+  } else {
+    document.getElementById('roomEntryOverlay').classList.add('show');
+    document.getElementById('roomCodeInput').focus();
+  }
 }
 
-function boot(){
-  myRoom = getRoomFromUrl();
-  if(!myRoom){ myRoom = prompt('กรอกรหัสสนาม (Room Code) 4 หลัก:'); }
+function submitRoomCode(){
+  const input = document.getElementById('roomCodeInput');
+  const val = (input.value || '').trim();
+  const err = document.getElementById('roomCodeError');
+  if(!val){
+    err.classList.add('show'); // ต้องกรอกรหัสก่อน ยังเข้าดูจอไม่ได้จนกว่าจะกรอก
+    input.focus();
+    return;
+  }
+  err.classList.remove('show');
+  document.getElementById('roomEntryOverlay').classList.remove('show');
+  document.getElementById('mainView').style.display='flex';
+  boot(val);
+}
+
+function boot(providedRoom){
+  myRoom = providedRoom || getRoomFromUrl();
   if(!myRoom) return;
   document.getElementById('roomBadge').textContent = 'ROOM: ' + myRoom;
   if(!firebase.apps.length) firebase.initializeApp(HARDCODED_CFG);
@@ -299,11 +344,11 @@ function handleTimer(d){
   const badge = document.getElementById('phaseLbl');
   badge.className = 'phase-lbl ' + phase;
   badge.textContent =
-    phase==='idle' ? 'รอเริ่ม' :
-    phase==='connect' ? 'กำลังเชื่อมต่อโดรน' :
-    phase==='connect_paused' ? 'พร้อมแล้ว - รอเริ่มแข่ง' :
-    phase==='countdown' ? 'เตรียมตัว' :
-    phase==='match' ? 'กำลังแข่งขัน' : 'จบรอบ';
+    phase==='idle' ? 'พร้อมเริ่ม' :
+    phase==='connect' ? 'Drone Setup' :
+    phase==='connect_paused' ? 'พร้อมเริ่มภารกิจ' :
+    phase==='countdown' ? 'Countdown' :
+    phase==='match' ? 'Mission Run' : (d.doneReason==='timeout' ? 'Timeout' : 'เสร็จสิ้น');
 
   document.getElementById('roundLbl').textContent = 'ROUND ' + (d.round || 1);
 
@@ -317,11 +362,11 @@ function handleTimer(d){
       const numEl = document.getElementById('countdownNum');
       if(n>0){
         numEl.textContent = n; numEl.classList.remove('go');
-        document.getElementById('countdownSub').textContent = 'เตรียมตัว';
+        document.getElementById('countdownSub').textContent = 'เตรียมพร้อม';
         if(enteringFreshCountdown) playCountSound(); // เล่นครั้งเดียวตอนเริ่มนับ ไม่เล่นซ้ำทุกวินาที
       } else {
         numEl.textContent = 'GO!'; numEl.classList.add('go');
-        document.getElementById('countdownSub').textContent = 'เริ่มแข่งขัน!';
+        document.getElementById('countdownSub').textContent = 'เริ่ม Mission Run!';
         playWhistleSound();
       }
     }

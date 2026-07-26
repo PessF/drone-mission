@@ -183,6 +183,7 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
 <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1.5"/></symbol>
 <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.8 10.8 0 0 1 12 5c5 0 9 4 10 7-.5 1.4-1.4 2.9-2.7 4.1M6.6 6.6C4.4 8 2.9 10 2 12c1 3 5 7 10 7 1.4 0 2.7-.3 3.9-.8"/><path d="M9.9 10a3 3 0 0 0 4.2 4.2"/></symbol>
 <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.7 7.7 0 0 0 0-3l2-1.4-2-3.4-2.3.8a7.7 7.7 0 0 0-2.6-1.5L14 2.5h-4l-.5 2.5a7.7 7.7 0 0 0-2.6 1.5l-2.3-.8-2 3.4 2 1.4a7.7 7.7 0 0 0 0 3l-2 1.4 2 3.4 2.3-.8a7.7 7.7 0 0 0 2.6 1.5l.5 2.5h4l.5-2.5a7.7 7.7 0 0 0 2.6-1.5l2.3.8 2-3.4-2-1.4Z"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12.5 9.5 18 20 6"/></symbol>
 <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
 <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 2.6-6.4"/><path d="M3 4v5h5"/></symbol>
 </svg>
@@ -249,7 +250,7 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
             <button class="btn btn-success" id="btnPhaseAction" onclick="phaseAction()"><svg class="icon"><use href="#i-play"></use></svg>เริ่มนับเวลาเชื่อมต่อ (2:00)</button>
           </div>
           <div class="btn-row">
-            <button class="btn btn-outline" id="btnPauseResume" onclick="pauseResumeMatch()" style="display:none"><svg class="icon"><use href="#i-pause"></use></svg>หยุดชั่วคราว</button>
+            <button class="btn btn-outline" id="btnPauseResume" onclick="pauseResumeTimer()" style="display:none"><svg class="icon"><use href="#i-pause"></use></svg>หยุดชั่วคราว</button>
             <button class="btn btn-outline" onclick="resetPhase()"><svg class="icon"><use href="#i-rotate"></use></svg>รีเซ็ต (รอบใหม่)</button>
           </div>
           <p style="font-size:12px;color:var(--muted);line-height:1.8;margin-top:6px">
@@ -446,6 +447,7 @@ let running=false;
 let remainingMs=CONNECT_MS;
 let startTs=0, baseMs=0, rafId=null;
 let countdownValue=0, countdownIv=null;
+let doneReason=null; // 'manual' (กดเสร็จสิ้นเอง) | 'timeout' (หมดเวลาโดยไม่ได้กด)
 
 function renderTimer(){
   const el = document.getElementById('timerDisplay');
@@ -455,7 +457,7 @@ function renderTimer(){
     el.textContent = countdownValue>0 ? String(countdownValue) : 'GO!';
     el.classList.remove('danger');
     badge.className = 'phase-badge connect';
-    badge.textContent = 'เตรียมตัว...';
+    badge.textContent = 'Countdown';
     return;
   }
 
@@ -467,10 +469,10 @@ function renderTimer(){
 
   badge.className = 'phase-badge ' + (phase==='idle'?'idle':(phase==='connect'||phase==='connect_paused')?'connect':'match');
   badge.textContent =
-    phase==='idle' ? 'รอเริ่ม' :
-    phase==='connect' ? 'กำลังเชื่อมต่อโดรน' :
-    phase==='connect_paused' ? 'พร้อมแล้ว - รอกดเริ่มแข่ง' :
-    phase==='match' ? 'กำลังแข่งขัน' : 'จบรอบ';
+    phase==='idle' ? 'พร้อมเริ่ม' :
+    phase==='connect' ? 'Drone Setup' :
+    phase==='connect_paused' ? 'พร้อมเริ่มภารกิจ' :
+    phase==='match' ? 'Mission Run' : (doneReason==='timeout' ? 'Timeout' : 'เสร็จสิ้น');
 }
 
 function loop(){
@@ -479,7 +481,7 @@ function loop(){
   if(remainingMs<=0){
     remainingMs=0; renderTimer();
     if(phase==='connect'){ haltTimer(); startCountdown321(); return; }
-    if(phase==='match'){ haltTimer(); phase='done'; pushTimerState(); renderTimer(); updateActionButton(); toast(ic('bell')+'หมดเวลาแข่งขัน'); return; }
+    if(phase==='match'){ haltTimer(); phase='done'; doneReason='timeout'; pushTimerState(); renderTimer(); updateActionButton(); toast(ic('bell')+'หมดเวลา Mission Run (Timeout)'); return; }
   }
   renderTimer();
   rafId = requestAnimationFrame(loop);
@@ -491,18 +493,22 @@ function updateActionButton(){
   const btn = document.getElementById('btnPhaseAction');
   const pr = document.getElementById('btnPauseResume');
   if(phase==='idle'){
-    btn.innerHTML=ic('play')+'เริ่มนับเวลาเชื่อมต่อ (2:00)'; btn.className='btn btn-success'; btn.disabled=false; pr.style.display='none';
+    btn.innerHTML=ic('play')+'เริ่ม Drone Setup (2:00 นาที)'; btn.className='btn btn-success'; btn.disabled=false; pr.style.display='none';
   } else if(phase==='connect'){
-    btn.innerHTML=ic('pause')+'หยุด (เด็กเชื่อมต่อสำเร็จ)'; btn.className='btn btn-purple'; btn.disabled=false; pr.style.display='none';
+    btn.innerHTML=ic('check')+'ยืนยัน Setup เสร็จแล้ว'; btn.className='btn btn-purple'; btn.disabled=false;
+    pr.style.display='block'; pr.innerHTML = running ? ic('pause')+'หยุดชั่วคราว' : ic('play')+'ทำงานต่อ';
   } else if(phase==='connect_paused'){
-    btn.innerHTML=ic('rocket')+'เริ่มแข่งขัน (นับ 3-2-1)'; btn.className='btn btn-success'; btn.disabled=false; pr.style.display='none';
+    btn.innerHTML=ic('rocket')+'เริ่ม Mission Run (นับ 3-2-1)'; btn.className='btn btn-success'; btn.disabled=false; pr.style.display='none';
   } else if(phase==='countdown'){
-    btn.innerHTML=ic('hourglass')+'กำลังนับถอยหลัง...'; btn.className='btn btn-outline'; btn.disabled=true; pr.style.display='none';
+    btn.innerHTML=ic('hourglass')+'Countdown กำลังเริ่ม...'; btn.className='btn btn-outline'; btn.disabled=true; pr.style.display='none';
   } else if(phase==='match'){
-    btn.innerHTML=ic('stop')+'จบรอบทันที'; btn.className='btn btn-danger'; btn.disabled=false;
+    btn.innerHTML=ic('check')+'เสร็จสิ้นภารกิจทันที'; btn.className='btn btn-danger'; btn.disabled=false;
     pr.style.display='block'; pr.innerHTML = running ? ic('pause')+'หยุดชั่วคราว' : ic('play')+'ทำงานต่อ';
   } else {
-    btn.textContent='รอบนี้จบแล้ว — กด "รีเซ็ต" เพื่อเริ่มรอบใหม่'; btn.className='btn btn-outline'; btn.disabled=true; pr.style.display='none';
+    btn.textContent = doneReason==='timeout'
+      ? 'หมดเวลา (Timeout) — กด "รีเซ็ต" เพื่อเริ่มรอบใหม่'
+      : 'เสร็จสิ้นแล้ว — กด "รีเซ็ต" เพื่อเริ่มรอบใหม่';
+    btn.className='btn btn-outline'; btn.disabled=true; pr.style.display='none';
   }
 }
 
@@ -510,7 +516,7 @@ function phaseAction(){
   if(phase==='idle'){ phase='connect'; remainingMs=CONNECT_MS; runTimer(); }
   else if(phase==='connect'){ haltTimer(); phase='connect_paused'; pushTimerState(); }
   else if(phase==='connect_paused'){ startCountdown321(); }
-  else if(phase==='match'){ haltTimer(); phase='done'; pushTimerState(); }
+  else if(phase==='match'){ haltTimer(); phase='done'; doneReason='manual'; pushTimerState(); }
   renderTimer(); updateActionButton();
 }
 
@@ -543,10 +549,10 @@ function startMatchPhase(){
   haltTimer();
   phase='match'; remainingMs=MATCH_MS; runTimer();
   renderTimer(); updateActionButton();
-  toast(ic('rocket')+'เริ่มการแข่งขัน 8 นาที');
+  toast(ic('rocket')+'เริ่ม Mission Run (8 นาที)');
 }
-function pauseResumeMatch(){
-  if(phase!=='match') return;
+function pauseResumeTimer(){
+  if(phase!=='match' && phase!=='connect') return;
   if(running){ haltTimer(); pushTimerState(); }
   else { runTimer(); }
   updateActionButton();
@@ -554,7 +560,7 @@ function pauseResumeMatch(){
 function resetPhase(){
   if(countdownIv){ clearInterval(countdownIv); countdownIv=null; }
   haltTimer();
-  phase='idle'; remainingMs=CONNECT_MS; countdownValue=0;
+  phase='idle'; remainingMs=CONNECT_MS; countdownValue=0; doneReason=null;
   pushTimerState(); renderTimer(); updateActionButton();
 }
 
@@ -562,7 +568,7 @@ function pushTimerState(){
   if(!roomRef) return;
   roomRef.child('timer').set({
     phase, running, startTs, remainingMs: Math.max(0, remainingMs|0), countdownValue: countdownValue||0,
-    team: teamName, round: curRound,
+    team: teamName, round: curRound, doneReason: doneReason||null,
   }).catch(()=>{});
 }
 
