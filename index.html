@@ -112,6 +112,7 @@ html[data-theme="dark"] .phase-badge.match { background:rgba(105,210,143,.15); }
   color:#f3e5f5; letter-spacing:2px; margin-bottom:14px; box-shadow:0 4px 16px rgba(123,31,162,.35); }
 html[data-theme="dark"] .timer-display { background:linear-gradient(135deg,#141c2b,#1d2638); border:1px solid var(--border); box-shadow:none; color:#dbeafe; }
 .timer-display.danger { color:#ef5350 !important; animation:blink .6s infinite; }
+.timer-display .timer-ms { font-size:.5em; opacity:.8; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
 
 .btn-row { display:flex; gap:8px; margin-bottom:8px; }
@@ -245,7 +246,7 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
         <div class="card-header"><svg class="icon"><use href="#i-clock"></use></svg>ตัวจับเวลา</div>
         <div class="card-body">
           <span class="phase-badge idle" id="phaseBadge">รอเริ่ม</span>
-          <div class="timer-display" id="timerDisplay">02:00</div>
+          <div class="timer-display" id="timerDisplay">02:00<span class="timer-ms">.00</span></div>
           <div class="btn-row">
             <button class="btn btn-success" id="btnPhaseAction" onclick="phaseAction()"><svg class="icon"><use href="#i-play"></use></svg>เริ่มนับเวลาเชื่อมต่อ (2:00)</button>
           </div>
@@ -461,11 +462,13 @@ function renderTimer(){
     return;
   }
 
-  const totalSec = Math.ceil(remainingMs/1000);
+  const totalMs = Math.max(0, remainingMs);
+  const totalSec = Math.floor(totalMs/1000);
+  const cs = Math.floor((totalMs%1000)/10);
   const mm = String(Math.floor(totalSec/60)).padStart(2,'0');
   const ss = String(totalSec%60).padStart(2,'0');
-  el.textContent = mm+':'+ss;
-  el.classList.toggle('danger', running && totalSec<=10 && totalSec>0);
+  el.innerHTML = mm+':'+ss+'<span class="timer-ms">.'+String(cs).padStart(2,'0')+'</span>';
+  el.classList.toggle('danger', running && totalMs<=10000 && totalMs>0);
 
   badge.className = 'phase-badge ' + (phase==='idle'?'idle':(phase==='connect'||phase==='connect_paused')?'connect':'match');
   badge.textContent =

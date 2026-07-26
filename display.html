@@ -79,6 +79,7 @@ body{
 .big-timer{ font-family:"Prompt",sans-serif; font-weight:900; font-size:clamp(70px,16vw,220px); line-height:1;
   letter-spacing:.02em; text-shadow:0 0 50px rgba(162,118,255,.5); }
 .big-timer.danger{ color:var(--red); animation:pulse .6s infinite; }
+.big-timer .timer-ms{ font-size:.42em; opacity:.8; }
 @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.4} }
 
 .round-lbl{ font-size:clamp(14px,2vw,20px); color:var(--muted); font-weight:700; letter-spacing:.1em; margin-top:clamp(10px,2vh,18px); }
@@ -215,7 +216,7 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
   <div class="team-name" id="teamNameDisp">— ทีม —</div>
 
   <div id="timerView">
-    <div class="big-timer" id="bigTimer">02:00</div>
+    <div class="big-timer" id="bigTimer">02:00<span class="timer-ms">.00</span></div>
     <div class="round-lbl" id="roundLbl">ROUND 1</div>
   </div>
 
@@ -393,12 +394,14 @@ function handleTimer(d){
   }
 }
 function renderBigTimer(ms){
-  const s = Math.ceil(ms/1000);
+  const totalMs = Math.max(0, ms);
+  const s = Math.floor(totalMs/1000);
+  const cs = Math.floor((totalMs%1000)/10);
   const mm = String(Math.floor(s/60)).padStart(2,'0');
   const ss = String(s%60).padStart(2,'0');
   const el = document.getElementById('bigTimer');
-  el.textContent = mm+':'+ss;
-  el.classList.toggle('danger', s<=10 && s>0);
+  el.innerHTML = mm+':'+ss+'<span class="timer-ms">.'+String(cs).padStart(2,'0')+'</span>';
+  el.classList.toggle('danger', totalMs<=10000 && totalMs>0);
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{
