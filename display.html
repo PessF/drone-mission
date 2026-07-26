@@ -77,9 +77,10 @@ body{
   text-shadow:0 0 30px rgba(162,118,255,.4); }
 
 .big-timer{ font-family:"Prompt",sans-serif; font-weight:900; font-size:clamp(70px,16vw,220px); line-height:1;
+  font-variant-numeric:tabular-nums;
   letter-spacing:.02em; text-shadow:0 0 50px rgba(162,118,255,.5); }
 .big-timer.danger{ color:var(--red); animation:pulse .6s infinite; }
-.big-timer .timer-ms{ font-size:.42em; opacity:.8; }
+.big-timer .timer-ms{ font-size:1em; }
 @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.4} }
 
 .round-lbl{ font-size:clamp(14px,2vw,20px); color:var(--muted); font-weight:700; letter-spacing:.1em; margin-top:clamp(10px,2vh,18px); }

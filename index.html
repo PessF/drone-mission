@@ -108,11 +108,12 @@ html[data-theme="dark"] .phase-badge.connect { background:rgba(230,81,0,.18); }
 .phase-badge.match   { background:#e8f5e9; color:var(--green); }
 html[data-theme="dark"] .phase-badge.match { background:rgba(105,210,143,.15); }
 .timer-display { font-family:'Prompt',sans-serif; font-weight:800; font-size:52px; text-align:center;
+  font-variant-numeric:tabular-nums;
   padding:22px 6px; border-radius:14px; background:linear-gradient(135deg,var(--purple-dk) 0%,var(--purple) 60%,var(--purple-md) 100%);
   color:#f3e5f5; letter-spacing:2px; margin-bottom:14px; box-shadow:0 4px 16px rgba(123,31,162,.35); }
 html[data-theme="dark"] .timer-display { background:linear-gradient(135deg,#141c2b,#1d2638); border:1px solid var(--border); box-shadow:none; color:#dbeafe; }
 .timer-display.danger { color:#ef5350 !important; animation:blink .6s infinite; }
-.timer-display .timer-ms { font-size:.5em; opacity:.8; }
+.timer-display .timer-ms { font-size:1em; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
 
 .btn-row { display:flex; gap:8px; margin-bottom:8px; }
