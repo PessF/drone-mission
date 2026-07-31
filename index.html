@@ -134,6 +134,12 @@ html[data-theme="dark"] .timer-display { background:linear-gradient(135deg,#141c
   border:2px solid var(--border); border-radius:12px; }
 .score-box.autonomous input:focus { border-color:var(--blue); }
 .score-box.manual input:focus { border-color:var(--purple-md); }
+.score-stepper { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+.score-stepper button { padding:10px 6px; border:none; border-radius:9px; font-size:15px; font-weight:800; cursor:pointer; }
+.score-stepper .minus { background:var(--surface-soft); color:var(--red); border:1.5px solid var(--border); }
+.score-stepper .plus { background:linear-gradient(135deg,var(--purple),var(--purple-md)); color:#fff; }
+.score-box.autonomous .score-stepper .plus { background:linear-gradient(135deg,#0d47a1,#1976d2); }
+.score-stepper button:active { transform:scale(.97); }
 .score-total { text-align:center; padding:14px; border-radius:12px; background:var(--surface-soft); margin-bottom:14px; }
 .score-total .stl { font-size:12px; color:var(--muted); font-weight:700; }
 .score-total .stn { font-size:38px; font-weight:800; color:var(--gold); }
@@ -295,10 +301,18 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
             <div class="score-box autonomous">
               <label>Autonomous (0–50)</label>
               <input type="number" id="scoreAuto" min="0" max="50" value="0" oninput="onScoreInput()" />
+              <div class="score-stepper">
+                <button class="minus" type="button" onclick="adjustScore('auto',-10)">−10</button>
+                <button class="plus" type="button" onclick="adjustScore('auto',10)">+10</button>
+              </div>
             </div>
             <div class="score-box manual">
               <label>Manual (0–50)</label>
               <input type="number" id="scoreManual" min="0" max="50" value="0" oninput="onScoreInput()" />
+              <div class="score-stepper">
+                <button class="minus" type="button" onclick="adjustScore('manual',-5)">−5</button>
+                <button class="plus" type="button" onclick="adjustScore('manual',5)">+5</button>
+              </div>
             </div>
           </div>
           <div class="score-total">
@@ -590,7 +604,9 @@ function resetPhase(){
   if(countdownIv){ clearInterval(countdownIv); countdownIv=null; }
   haltTimer();
   phase='idle'; remainingMs=CONNECT_MS; countdownValue=0; doneReason=null; autonomousTimeMs=null; manualTimeMs=null;
+  resetScoreInputs();
   pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI();
+  toast(ic('rotate')+'รีเซ็ตเวลาและคะแนนแล้ว');
 }
 
 
@@ -649,6 +665,34 @@ function pushTimerState(){
 
 /* ── Score entry ── */
 function clamp50(v){ v=parseInt(v)||0; return Math.max(0, Math.min(50, v)); }
+function adjustScore(type, delta){
+  const id = type==='auto' ? 'scoreAuto' : 'scoreManual';
+  const input = document.getElementById(id);
+  input.value = clamp50((parseInt(input.value)||0) + delta);
+  onScoreInput();
+}
+function resetScoreInputs(){
+  document.getElementById('scoreAuto').value=0;
+  document.getElementById('scoreManual').value=0;
+  onScoreInput();
+}
+function resetForNextCompetition(){
+  if(countdownIv){ clearInterval(countdownIv); countdownIv=null; }
+  haltTimer();
+  phase='idle'; remainingMs=CONNECT_MS; countdownValue=0; doneReason=null; autonomousTimeMs=null; manualTimeMs=null;
+  curRound=1;
+  teamName='';
+  document.getElementById('teamNameInput').value='';
+  document.getElementById('tabRound1').classList.add('active');
+  document.getElementById('tabRound2').classList.remove('active');
+  document.getElementById('scoreRoundLbl').textContent='Round 1';
+  resetScoreInputs();
+  if(roomRef){
+    roomRef.child('team').set({name:''}).catch(()=>{});
+    roomRef.child('liveScore').set({autonomousScore:0,manualScore:0,totalScore:0,team:'',round:1,updatedAt:Date.now()}).catch(()=>{});
+  }
+  pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI(); refreshRoundsTable();
+}
 let liveScoreDebounce=null;
 function onScoreInput(){
   const a = clamp50(document.getElementById('scoreAuto').value);
@@ -670,8 +714,12 @@ function saveRound(){
   const total = a+m;
   const matchTimeUsedMs = (phase==='match' || phase==='done') ? getMatchElapsedMs() : 0;
   const entry = { team: teamName, autonomousScore:a, manualScore:m, totalScore:total, autonomousTimeMs, manualTimeMs, matchTimeUsedMs, completionStatus:(autonomousTimeMs!==null&&manualTimeMs!==null?'completed':doneReason||'incomplete'), submittedAt: Date.now() };
+  const savedRound=curRound;
   roomRef.child(`teams_rounds/${sanitizeKey(teamName)}/round${curRound}`).set(entry)
-    .then(()=>{ toast(ic('save')+'บันทึกคะแนน Round '+curRound+' แล้ว'); refreshRoundsTable(); })
+    .then(()=>{
+      toast(ic('save')+'บันทึกคะแนน Round '+savedRound+' แล้ว — พร้อมสำหรับทีมถัดไป');
+      resetForNextCompetition();
+    })
     .catch(()=>toast('บันทึกไม่สำเร็จ'));
 }
 function sanitizeKey(s){ return (s||'team').replace(/[.#$/\[\]]/g,'_'); }
