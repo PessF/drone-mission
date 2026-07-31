@@ -403,6 +403,7 @@ const MATCH_MS = 8 * 60 * 1000;
 let db=null, roomRef=null, myRoom=null;
 let curRound = 1;
 let teamName = '';
+let lastSavedTeamName = '';
 let scoresVisible = false;
 
 /* ── Room / init ── */
@@ -691,7 +692,7 @@ function resetForNextCompetition(){
     roomRef.child('team').set({name:''}).catch(()=>{});
     roomRef.child('liveScore').set({autonomousScore:0,manualScore:0,totalScore:0,team:'',round:1,updatedAt:Date.now()}).catch(()=>{});
   }
-  pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI(); refreshRoundsTable();
+  pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI(); refreshRoundsTable(lastSavedTeamName);
 }
 let liveScoreDebounce=null;
 function onScoreInput(){
@@ -709,16 +710,19 @@ function onScoreInput(){
 function saveRound(){
   if(!roomRef){ toast('กรุณาเข้าห้องก่อน'); return; }
   if(!teamName){ toast('กรุณากรอกชื่อทีมก่อน'); return; }
+  const teamSnapshot = teamName.trim();
   const a = clamp50(document.getElementById('scoreAuto').value);
   const m = clamp50(document.getElementById('scoreManual').value);
   const total = a+m;
   const matchTimeUsedMs = (phase==='match' || phase==='done') ? getMatchElapsedMs() : 0;
-  const entry = { team: teamName, autonomousScore:a, manualScore:m, totalScore:total, autonomousTimeMs, manualTimeMs, matchTimeUsedMs, completionStatus:(autonomousTimeMs!==null&&manualTimeMs!==null?'completed':doneReason||'incomplete'), submittedAt: Date.now() };
-  const savedRound=curRound;
-  roomRef.child(`teams_rounds/${sanitizeKey(teamName)}/round${curRound}`).set(entry)
+  const entry = { team: teamSnapshot, autonomousScore:a, manualScore:m, totalScore:total, autonomousTimeMs, manualTimeMs, matchTimeUsedMs, completionStatus:(autonomousTimeMs!==null&&manualTimeMs!==null?'completed':doneReason||'incomplete'), submittedAt: Date.now() };
+  const savedRound = curRound;
+  roomRef.child(`teams_rounds/${sanitizeKey(teamSnapshot)}/round${curRound}`).set(entry)
     .then(()=>{
+      lastSavedTeamName = teamSnapshot;
       toast(ic('save')+'บันทึกคะแนน Round '+savedRound+' แล้ว — พร้อมสำหรับทีมถัดไป');
       resetForNextCompetition();
+      refreshRoundsTable(teamSnapshot);
     })
     .catch(()=>toast('บันทึกไม่สำเร็จ'));
 }
@@ -734,12 +738,13 @@ function loadRoundIntoInputs(r){
   });
 }
 
-function refreshRoundsTable(){
-  if(!roomRef || !teamName){
+function refreshRoundsTable(teamOverride=''){
+  const targetTeam = (teamOverride || teamName || lastSavedTeamName || '').trim();
+  if(!roomRef || !targetTeam){
     document.getElementById('roundsBody').innerHTML = '<tr><td colspan="9" class="empty-state">ยังไม่มีข้อมูล</td></tr>';
     return;
   }
-  roomRef.child(`teams_rounds/${sanitizeKey(teamName)}`).once('value').then(snap=>{
+  roomRef.child(`teams_rounds/${sanitizeKey(targetTeam)}`).once('value').then(snap=>{
     const d = snap.val() || {};
     const rows = [];
     [[1,d.round1],[2,d.round2]].forEach(([n,rd])=>{ if(rd) rows.push({n, ...rd}); });
