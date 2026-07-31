@@ -138,6 +138,17 @@ html[data-theme="dark"] .timer-display { background:linear-gradient(135deg,#141c
 .score-total .stl { font-size:12px; color:var(--muted); font-weight:700; }
 .score-total .stn { font-size:38px; font-weight:800; color:var(--gold); }
 
+/* Mission timestamps */
+.mission-stamps { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+.stamp-card { border:1.5px solid var(--border); border-radius:12px; padding:12px; background:var(--surface-soft); }
+.stamp-card .stamp-title { font-size:13px; font-weight:800; margin-bottom:8px; }
+.stamp-card .stamp-time { font-size:25px; font-weight:900; font-variant-numeric:tabular-nums; margin-bottom:9px; }
+.stamp-card.done { border-color:var(--green); }
+.stamp-card.done .stamp-time { color:var(--green); }
+.stamp-card .btn { width:100%; padding:10px 8px; }
+@media (max-width:520px){ .mission-stamps{grid-template-columns:1fr;} }
+.timestamp-note { font-size:12px; color:var(--muted); line-height:1.7; margin-top:10px; }
+
 /* Rounds table */
 table.rounds-table { width:100%; border-collapse:collapse; font-size:13px; }
 table.rounds-table th, table.rounds-table td { padding:10px 6px; text-align:center; border-bottom:1px solid var(--border); }
@@ -255,6 +266,19 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
             <button class="btn btn-outline" id="btnPauseResume" onclick="pauseResumeTimer()" style="display:none"><svg class="icon"><use href="#i-pause"></use></svg>หยุดชั่วคราว</button>
             <button class="btn btn-outline" onclick="resetPhase()"><svg class="icon"><use href="#i-rotate"></use></svg>รีเซ็ต (รอบใหม่)</button>
           </div>
+          <div class="mission-stamps">
+            <div class="stamp-card" id="stampAutoCard">
+              <div class="stamp-title">Autonomous เสร็จสิ้น</div>
+              <div class="stamp-time" id="stampAutoTime">—</div>
+              <button class="btn btn-navy" id="btnStampAuto" onclick="toggleMissionStamp('autonomous')" disabled>Timestamp Autonomous</button>
+            </div>
+            <div class="stamp-card" id="stampManualCard">
+              <div class="stamp-title">Manual เสร็จสิ้น</div>
+              <div class="stamp-time" id="stampManualTime">—</div>
+              <button class="btn btn-purple" id="btnStampManual" onclick="toggleMissionStamp('manual')" disabled>Timestamp Manual</button>
+            </div>
+          </div>
+          <div class="timestamp-note">กด Timestamp เมื่อภารกิจส่วนนั้นเสร็จ เวลาหลัก 8 นาทียังคงเดินต่อ และจะหยุดอัตโนมัติเมื่อ Autonomous กับ Manual ถูกมาร์กครบทั้งสองรายการ</div>
           <p style="font-size:12px;color:var(--muted);line-height:1.8;margin-top:6px">
             1) กด "เริ่มนับเวลาเชื่อมต่อ" → 2) ถ้าเด็กเชื่อมต่อทันภายใน 2 นาที กด "หยุด" เพื่อให้เด็กเข้าประจำที่ →
             3) กด "เริ่มแข่งขัน" ระบบจะนับ 3-2-1 แล้วเริ่มจับเวลา 8 นาทีให้อัตโนมัติ<br/>
@@ -290,8 +314,8 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
         <div class="card-header"><svg class="icon"><use href="#i-clipboard-list"></use></svg>ผลคะแนน (ห้องนี้)</div>
         <div class="card-body" style="padding:0 18px 18px">
           <table class="rounds-table">
-            <thead><tr><th>ทีม</th><th>Round</th><th>Autonomous</th><th>Manual</th><th>รวม</th><th>เวลาที่ใช้</th><th></th></tr></thead>
-            <tbody id="roundsBody"><tr><td colspan="7" class="empty-state">ยังไม่มีข้อมูล</td></tr></tbody>
+            <thead><tr><th>ทีม</th><th>Round</th><th>คะแนน Auto</th><th>เวลา Auto</th><th>คะแนน Manual</th><th>เวลา Manual</th><th>รวม</th><th>เวลารวม</th><th></th></tr></thead>
+            <tbody id="roundsBody"><tr><td colspan="9" class="empty-state">ยังไม่มีข้อมูล</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -449,7 +473,8 @@ let running=false;
 let remainingMs=CONNECT_MS;
 let startTs=0, baseMs=0, rafId=null;
 let countdownValue=0, countdownIv=null;
-let doneReason=null; // 'manual' (กดเสร็จสิ้นเอง) | 'timeout' (หมดเวลาโดยไม่ได้กด)
+let doneReason=null; // 'manual' | 'completed' | 'timeout'
+let autonomousTimeMs=null, manualTimeMs=null;
 
 function renderTimer(){
   const el = document.getElementById('timerDisplay');
@@ -476,7 +501,7 @@ function renderTimer(){
     phase==='idle' ? 'พร้อมเริ่ม' :
     phase==='connect' ? 'Drone Setup' :
     phase==='connect_paused' ? 'พร้อมเริ่มภารกิจ' :
-    phase==='match' ? 'Mission Run' : (doneReason==='timeout' ? 'Timeout' : 'เสร็จสิ้น');
+    phase==='match' ? 'Mission Run' : (doneReason==='timeout' ? 'Timeout' : doneReason==='completed' ? 'ครบทั้ง 2 ภารกิจ' : 'เสร็จสิ้น');
 }
 
 function loop(){
@@ -485,13 +510,13 @@ function loop(){
   if(remainingMs<=0){
     remainingMs=0; renderTimer();
     if(phase==='connect'){ haltTimer(); startCountdown321(); return; }
-    if(phase==='match'){ haltTimer(); phase='done'; doneReason='timeout'; pushTimerState(); renderTimer(); updateActionButton(); toast(ic('bell')+'หมดเวลา Mission Run (Timeout)'); return; }
+    if(phase==='match'){ haltTimer(); phase='done'; doneReason='timeout'; pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI(); toast(ic('bell')+'หมดเวลา Mission Run (Timeout)'); return; }
   }
   renderTimer();
   rafId = requestAnimationFrame(loop);
 }
-function runTimer(){ startTs=Date.now(); baseMs=remainingMs; running=true; rafId=requestAnimationFrame(loop); pushTimerState(); }
-function haltTimer(){ if(rafId) cancelAnimationFrame(rafId); rafId=null; running=false; }
+function runTimer(){ startTs=Date.now(); baseMs=remainingMs; running=true; rafId=requestAnimationFrame(loop); pushTimerState(); updateTimestampUI(); }
+function haltTimer(){ if(rafId) cancelAnimationFrame(rafId); rafId=null; running=false; updateTimestampUI(); }
 
 function updateActionButton(){
   const btn = document.getElementById('btnPhaseAction');
@@ -521,7 +546,7 @@ function phaseAction(){
   else if(phase==='connect'){ haltTimer(); phase='connect_paused'; pushTimerState(); }
   else if(phase==='connect_paused'){ startCountdown321(); }
   else if(phase==='match'){ haltTimer(); phase='done'; doneReason='manual'; pushTimerState(); }
-  renderTimer(); updateActionButton();
+  renderTimer(); updateActionButton(); updateTimestampUI();
 }
 
 function startCountdown321(){
@@ -551,7 +576,7 @@ function pushCountdownState(n){
 
 function startMatchPhase(){
   haltTimer();
-  phase='match'; remainingMs=MATCH_MS; runTimer();
+  phase='match'; remainingMs=MATCH_MS; autonomousTimeMs=null; manualTimeMs=null; doneReason=null; runTimer();
   renderTimer(); updateActionButton();
   toast(ic('rocket')+'เริ่ม Mission Run (8 นาที)');
 }
@@ -564,8 +589,53 @@ function pauseResumeTimer(){
 function resetPhase(){
   if(countdownIv){ clearInterval(countdownIv); countdownIv=null; }
   haltTimer();
-  phase='idle'; remainingMs=CONNECT_MS; countdownValue=0; doneReason=null;
-  pushTimerState(); renderTimer(); updateActionButton();
+  phase='idle'; remainingMs=CONNECT_MS; countdownValue=0; doneReason=null; autonomousTimeMs=null; manualTimeMs=null;
+  pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI();
+}
+
+
+function getMatchElapsedMs(){
+  if(phase!=='match' && phase!=='done') return 0;
+  if(running) return Math.max(0, Math.min(MATCH_MS, MATCH_MS - Math.max(0, baseMs - (Date.now()-startTs))));
+  return Math.max(0, Math.min(MATCH_MS, MATCH_MS - remainingMs));
+}
+function formatMissionTime(ms){
+  if(ms===null || ms===undefined) return '—';
+  const total=Math.max(0,ms);
+  const min=Math.floor(total/60000);
+  const sec=Math.floor((total%60000)/1000);
+  const cs=Math.floor((total%1000)/10);
+  return String(min).padStart(2,'0')+':'+String(sec).padStart(2,'0')+'.'+String(cs).padStart(2,'0');
+}
+function updateTimestampUI(){
+  const active = phase==='match' && running;
+  const items=[['autonomous',autonomousTimeMs,'stampAutoCard','stampAutoTime','btnStampAuto'],['manual',manualTimeMs,'stampManualCard','stampManualTime','btnStampManual']];
+  items.forEach(([type,value,cardId,timeId,btnId])=>{
+    const card=document.getElementById(cardId), time=document.getElementById(timeId), btn=document.getElementById(btnId);
+    if(!card||!time||!btn) return;
+    const done=value!==null;
+    card.classList.toggle('done',done);
+    time.textContent=formatMissionTime(value);
+    btn.disabled = done ? phase!=='match' : !active;
+    btn.textContent = done ? 'ยกเลิก Timestamp' : ('Timestamp '+(type==='autonomous'?'Autonomous':'Manual'));
+    btn.className = 'btn ' + (done ? 'btn-outline' : (type==='autonomous'?'btn-navy':'btn-purple'));
+  });
+}
+function toggleMissionStamp(type){
+  if(type==='autonomous' && autonomousTimeMs!==null){ autonomousTimeMs=null; doneReason=null; }
+  else if(type==='manual' && manualTimeMs!==null){ manualTimeMs=null; doneReason=null; }
+  else {
+    if(phase!=='match' || !running){ toast('Timestamp ได้เฉพาะขณะที่ Mission Run กำลังเดิน'); return; }
+    const elapsed=getMatchElapsedMs();
+    if(type==='autonomous') autonomousTimeMs=elapsed; else manualTimeMs=elapsed;
+    toast(ic('clock')+(type==='autonomous'?'Autonomous':'Manual')+' เสร็จที่ '+formatMissionTime(elapsed));
+  }
+  if(autonomousTimeMs!==null && manualTimeMs!==null && phase==='match'){
+    remainingMs=Math.max(0, MATCH_MS-getMatchElapsedMs());
+    haltTimer(); phase='done'; doneReason='completed';
+    toast(ic('check')+'ครบทั้ง Autonomous และ Manual — หยุดเวลาอัตโนมัติ');
+  }
+  pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI();
 }
 
 function pushTimerState(){
@@ -573,6 +643,7 @@ function pushTimerState(){
   roomRef.child('timer').set({
     phase, running, startTs, remainingMs: Math.max(0, remainingMs|0), countdownValue: countdownValue||0,
     team: teamName, round: curRound, doneReason: doneReason||null,
+    autonomousTimeMs, manualTimeMs,
   }).catch(()=>{});
 }
 
@@ -597,8 +668,8 @@ function saveRound(){
   const a = clamp50(document.getElementById('scoreAuto').value);
   const m = clamp50(document.getElementById('scoreManual').value);
   const total = a+m;
-  const matchTimeUsedMs = (phase==='match' || phase==='done') ? Math.max(0, MATCH_MS - remainingMs) : 0;
-  const entry = { team: teamName, autonomousScore:a, manualScore:m, totalScore:total, matchTimeUsedMs, submittedAt: Date.now() };
+  const matchTimeUsedMs = (phase==='match' || phase==='done') ? getMatchElapsedMs() : 0;
+  const entry = { team: teamName, autonomousScore:a, manualScore:m, totalScore:total, autonomousTimeMs, manualTimeMs, matchTimeUsedMs, completionStatus:(autonomousTimeMs!==null&&manualTimeMs!==null?'completed':doneReason||'incomplete'), submittedAt: Date.now() };
   roomRef.child(`teams_rounds/${sanitizeKey(teamName)}/round${curRound}`).set(entry)
     .then(()=>{ toast(ic('save')+'บันทึกคะแนน Round '+curRound+' แล้ว'); refreshRoundsTable(); })
     .catch(()=>toast('บันทึกไม่สำเร็จ'));
@@ -617,7 +688,7 @@ function loadRoundIntoInputs(r){
 
 function refreshRoundsTable(){
   if(!roomRef || !teamName){
-    document.getElementById('roundsBody').innerHTML = '<tr><td colspan="7" class="empty-state">ยังไม่มีข้อมูล</td></tr>';
+    document.getElementById('roundsBody').innerHTML = '<tr><td colspan="9" class="empty-state">ยังไม่มีข้อมูล</td></tr>';
     return;
   }
   roomRef.child(`teams_rounds/${sanitizeKey(teamName)}`).once('value').then(snap=>{
@@ -625,16 +696,20 @@ function refreshRoundsTable(){
     const rows = [];
     [[1,d.round1],[2,d.round2]].forEach(([n,rd])=>{ if(rd) rows.push({n, ...rd}); });
     const tbody = document.getElementById('roundsBody');
-    if(rows.length===0){ tbody.innerHTML = '<tr><td colspan="7" class="empty-state">ยังไม่มีข้อมูล</td></tr>'; return; }
-    const bestIdx = rows.reduce((bi,r,i,arr)=> r.totalScore > arr[bi].totalScore ? i : bi, 0);
+    if(rows.length===0){ tbody.innerHTML = '<tr><td colspan="9" class="empty-state">ยังไม่มีข้อมูล</td></tr>'; return; }
+    const rankCompare=(a,b)=> (b.totalScore||0)-(a.totalScore||0) || (a.matchTimeUsedMs??MATCH_MS)-(b.matchTimeUsedMs??MATCH_MS) || (b.autonomousScore||0)-(a.autonomousScore||0) || (a.autonomousTimeMs??MATCH_MS)-(b.autonomousTimeMs??MATCH_MS) || (b.manualScore||0)-(a.manualScore||0) || (a.manualTimeMs??MATCH_MS)-(b.manualTimeMs??MATCH_MS);
+    const bestRow=[...rows].sort(rankCompare)[0];
+    const bestIdx=rows.indexOf(bestRow);
     tbody.innerHTML = rows.map((r,i)=>`
       <tr class="${i===bestIdx?'best':''}">
         <td class="team-cell">${escapeHtml(r.team || teamName)}</td>
         <td>Round ${r.n}${i===bestIdx?(' '+ic('trophy','icon-only')):''}</td>
         <td>${r.autonomousScore}</td>
+        <td>${formatMissionTime(r.autonomousTimeMs)}</td>
         <td>${r.manualScore}</td>
+        <td>${formatMissionTime(r.manualTimeMs)}</td>
         <td>${r.totalScore}</td>
-        <td>${((r.matchTimeUsedMs||0)/1000).toFixed(1)}s</td>
+        <td>${formatMissionTime(r.matchTimeUsedMs||0)}</td>
         <td><button class="del-btn" onclick="confirmDeleteRound(${r.n})" title="ลบ">${ic('trash','icon-only')}</button></td>
       </tr>`).join('');
   });
@@ -693,7 +768,7 @@ function toast(msg){
   toastTimer = setTimeout(()=>el.classList.remove('show'), 2200);
 }
 
-renderTimer(); updateActionButton();
+renderTimer(); updateActionButton(); updateTimestampUI();
 </script>
 </body>
 </html>

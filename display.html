@@ -84,6 +84,11 @@ body{
 @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.4} }
 
 .round-lbl{ font-size:clamp(14px,2vw,20px); color:var(--muted); font-weight:700; letter-spacing:.1em; margin-top:clamp(10px,2vh,18px); }
+.timestamp-row{display:flex;gap:clamp(10px,2vw,24px);margin-top:clamp(12px,2vh,20px);flex-wrap:wrap;justify-content:center;}
+.timestamp-chip{min-width:170px;text-align:center;padding:9px 16px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.06);color:var(--muted);font-size:clamp(11px,1.3vw,15px);font-weight:700;}
+.timestamp-chip.done{border-color:rgba(105,240,174,.5);color:var(--green);}
+.timestamp-chip strong{display:block;font-size:clamp(18px,2.4vw,30px);font-variant-numeric:tabular-nums;color:var(--text);margin-top:2px;}
+.timestamp-chip.done strong{color:var(--green);}
 
 /* Score reveal */
 #scorePanel{ display:none; flex-direction:column; align-items:center; }
@@ -219,6 +224,10 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
   <div id="timerView">
     <div class="big-timer" id="bigTimer">02:00<span class="timer-ms">.00</span></div>
     <div class="round-lbl" id="roundLbl">ROUND 1</div>
+    <div class="timestamp-row">
+      <div class="timestamp-chip" id="autoStampDisp">AUTONOMOUS<strong>—</strong></div>
+      <div class="timestamp-chip" id="manualStampDisp">MANUAL<strong>—</strong></div>
+    </div>
   </div>
 
   <div id="scorePanel">
@@ -350,9 +359,11 @@ function handleTimer(d){
     phase==='connect' ? 'Drone Setup' :
     phase==='connect_paused' ? 'พร้อมเริ่มภารกิจ' :
     phase==='countdown' ? 'Countdown' :
-    phase==='match' ? 'Mission Run' : (d.doneReason==='timeout' ? 'Timeout' : 'เสร็จสิ้น');
+    phase==='match' ? 'Mission Run' : (d.doneReason==='timeout' ? 'Timeout' : d.doneReason==='completed' ? 'ครบทั้ง 2 ภารกิจ' : 'เสร็จสิ้น');
 
   document.getElementById('roundLbl').textContent = 'ROUND ' + (d.round || 1);
+  renderTimestampChip('autoStampDisp','AUTONOMOUS',d.autonomousTimeMs);
+  renderTimestampChip('manualStampDisp','MANUAL',d.manualTimeMs);
 
   const overlay = document.getElementById('countdownOverlay');
   if(phase==='countdown'){
@@ -394,6 +405,18 @@ function handleTimer(d){
     renderBigTimer(remaining);
   }
 }
+
+function formatMissionTime(ms){
+  if(ms===null || ms===undefined) return '—';
+  const total=Math.max(0,ms), min=Math.floor(total/60000), sec=Math.floor((total%60000)/1000), cs=Math.floor((total%1000)/10);
+  return String(min).padStart(2,'0')+':'+String(sec).padStart(2,'0')+'.'+String(cs).padStart(2,'0');
+}
+function renderTimestampChip(id,label,ms){
+  const el=document.getElementById(id); if(!el) return;
+  el.classList.toggle('done',ms!==null && ms!==undefined);
+  el.innerHTML=label+'<strong>'+formatMissionTime(ms)+'</strong>';
+}
+
 function renderBigTimer(ms){
   const totalMs = Math.max(0, ms);
   const s = Math.floor(totalMs/1000);
