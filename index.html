@@ -657,6 +657,13 @@ function toggleMissionStamp(type){
 
 function pushTimerState(){
   if(!roomRef) return;
+  if(running){
+    // กำลังนับถอยหลังอยู่: รีเฟรช startTs เป็น "ตอนนี้" ทุกครั้งที่ push
+    // เพื่อไม่ให้หน้า Display เอาเวลาที่ผ่านไปมาลบซ้ำสอง (ค่าจะโดดหายไปเหมือนเวลาถูกลบ)
+    remainingMs = Math.max(0, baseMs - (Date.now()-startTs));
+    startTs = Date.now();
+    baseMs = remainingMs;
+  }
   roomRef.child('timer').set({
     phase, running, startTs, remainingMs: Math.max(0, remainingMs|0), countdownValue: countdownValue||0,
     team: teamName, round: curRound, doneReason: doneReason||null,
