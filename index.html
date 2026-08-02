@@ -677,23 +677,6 @@ function resetScoreInputs(){
   document.getElementById('scoreManual').value=0;
   onScoreInput();
 }
-function resetForNextCompetition(){
-  if(countdownIv){ clearInterval(countdownIv); countdownIv=null; }
-  haltTimer();
-  phase='idle'; remainingMs=CONNECT_MS; countdownValue=0; doneReason=null; autonomousTimeMs=null; manualTimeMs=null;
-  curRound=1;
-  teamName='';
-  document.getElementById('teamNameInput').value='';
-  document.getElementById('tabRound1').classList.add('active');
-  document.getElementById('tabRound2').classList.remove('active');
-  document.getElementById('scoreRoundLbl').textContent='Round 1';
-  resetScoreInputs();
-  if(roomRef){
-    roomRef.child('team').set({name:''}).catch(()=>{});
-    roomRef.child('liveScore').set({autonomousScore:0,manualScore:0,totalScore:0,team:'',round:1,updatedAt:Date.now()}).catch(()=>{});
-  }
-  pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI(); refreshRoundsTable(lastSavedTeamName);
-}
 let liveScoreDebounce=null;
 function onScoreInput(){
   const a = clamp50(document.getElementById('scoreAuto').value);
@@ -720,8 +703,7 @@ function saveRound(){
   roomRef.child(`teams_rounds/${sanitizeKey(teamSnapshot)}/round${curRound}`).set(entry)
     .then(()=>{
       lastSavedTeamName = teamSnapshot;
-      toast(ic('save')+'บันทึกคะแนน Round '+savedRound+' แล้ว — พร้อมสำหรับทีมถัดไป');
-      resetForNextCompetition();
+      toast(ic('save')+'บันทึกคะแนน Round '+savedRound+' แล้ว');
       refreshRoundsTable(teamSnapshot);
     })
     .catch(()=>toast('บันทึกไม่สำเร็จ'));
