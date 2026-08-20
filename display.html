@@ -261,6 +261,9 @@ const HARDCODED_CFG = {
 let db=null, roomRef=null, myRoom=null;
 let rafId=null;
 let lastPhase=null, lastCountdownValue=null;
+let serverTimeOffsetMs=0;
+
+function nowMs(){ return Date.now()+serverTimeOffsetMs; }
 
 function getRoomFromUrl(){
   const p = new URLSearchParams(location.search);
@@ -313,6 +316,9 @@ function boot(providedRoom){
     document.getElementById('statusTxt').textContent = on ? 'เชื่อมต่อแล้ว' : 'กำลังเชื่อมต่อ...';
     document.getElementById('connBanner').classList.toggle('show', !on);
   });
+  db.ref('.info/serverTimeOffset').on('value', snap=>{
+    serverTimeOffsetMs = Number(snap.val()) || 0;
+  });
 
   roomRef.child('team').on('value', snap=>{
     const d = snap.val();
@@ -351,6 +357,7 @@ function togglePanels(scoresVisible){
 function handleTimer(d){
   if(!d) return;
   const phase = d.phase || 'idle';
+  const previousPhase = lastPhase;
 
   const badge = document.getElementById('phaseLbl');
   badge.className = 'phase-lbl ' + phase;
@@ -369,7 +376,7 @@ function handleTimer(d){
   if(phase==='countdown'){
     overlay.classList.add('show');
     const n = d.countdownValue;
-    const enteringFreshCountdown = (lastPhase !== 'countdown');
+    const enteringFreshCountdown = (previousPhase !== 'countdown');
     if(n !== lastCountdownValue){
       lastCountdownValue = n;
       const numEl = document.getElementById('countdownNum');
@@ -387,16 +394,25 @@ function handleTimer(d){
     overlay.classList.remove('show');
     lastCountdownValue = null;
   }
+  if(previousPhase==='match' && phase==='done' && d.doneReason==='timeout') playWhistleSound();
   lastPhase = phase;
 
   if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
-  let remaining = d.remainingMs || 0;
+  const storedRemaining = Number(d.remainingMs);
+  let remaining = Number.isFinite(storedRemaining) ? Math.max(0,storedRemaining) : 0;
   if(d.running){
-    const elapsed = Date.now() - (d.startTs || Date.now());
-    remaining = Math.max(0, remaining - elapsed);
-    const startTsLocal = Date.now(), baseMs = remaining;
+    const endTs = Number(d.endTs);
+    if(Number.isFinite(endTs) && endTs>0){
+      remaining = Math.max(0,endTs-nowMs());
+    } else {
+      const startTs = Number(d.startTs);
+      const elapsed = Number.isFinite(startTs) ? Math.max(0,nowMs()-startTs) : 0;
+      remaining = Math.max(0,remaining-elapsed);
+    }
+    const fallbackEndTs = nowMs()+remaining;
+    const sharedEndTs = Number.isFinite(endTs) && endTs>0 ? endTs : fallbackEndTs;
     const tick = () => {
-      const r = Math.max(0, baseMs - (Date.now()-startTsLocal));
+      const r = Math.max(0,sharedEndTs-nowMs());
       renderBigTimer(r);
       if(r>0) rafId = requestAnimationFrame(tick);
     };
