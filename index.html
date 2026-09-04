@@ -37,7 +37,8 @@ html[data-theme="dark"] {
   --green:#69d28f; --gold:#ffd166; --red:#ff6b6b; --blue:#64b5f6;
   --surface-soft:#1d2430; --input-bg:#0f1520; --modal-bg:#171d29;
 }
-body { font-family:'Prompt',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+html { overflow-x:hidden; }
+body { font-family:'Prompt',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; min-height:100dvh; overflow-x:hidden; }
 button, input, select { font-family:'Prompt',sans-serif; }
 input, select { background:var(--input-bg); color:var(--text); }
 
@@ -187,6 +188,58 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
 .icon { width:1em; height:1em; display:inline-block; vertical-align:-0.15em; margin-right:.4em;
   stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
 .icon.icon-only { margin-right:0; }
+
+/* ── Responsive controller layout ── */
+@media (max-width:880px) {
+  main { max-width:720px; }
+}
+@media (max-width:640px) {
+  .screen { padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom)); }
+  .screen-card { padding:24px 20px; border-radius:16px; }
+  .screen-logo { margin-bottom:20px; }
+  .screen-logo .brand { font-size:clamp(20px,7vw,26px); }
+
+  header {
+    display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 10px;
+    padding:max(10px,env(safe-area-inset-top)) 12px 10px;
+  }
+  .h-logo { grid-column:1/-1; grid-row:1; min-width:0; font-size:clamp(15px,4.8vw,19px); overflow:hidden; text-overflow:ellipsis; }
+  .h-room-badge { grid-column:1; grid-row:2; justify-self:start; padding:6px 11px; }
+  .theme-toggle { grid-column:2; grid-row:2; margin-left:0; padding:7px 11px; }
+  .h-sync { grid-column:1/-1; grid-row:3; min-width:0; }
+  .h-sync span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  main { display:block; padding:10px; }
+  .card { border-radius:13px; margin-bottom:10px; }
+  .card-header { padding:12px 14px; gap:10px; flex-wrap:wrap; }
+  .card-body { padding:14px; }
+  .timer-display { font-size:clamp(38px,14vw,52px); padding:18px 5px; }
+  .record-tools { width:100%; }
+  .record-tools .btn { flex:1 1 130px; min-height:40px; }
+  .table-scroll { margin:0; padding-left:12px !important; padding-right:12px !important; -webkit-overflow-scrolling:touch; }
+  #toast { bottom:max(12px,env(safe-area-inset-bottom)); width:calc(100% - 24px); max-width:440px; text-align:center; }
+}
+@media (max-width:440px) {
+  .btn-row { flex-direction:column; }
+  .btn, .btn-full, .round-tab, .score-stepper button { min-height:44px; }
+  .score-inputs { gap:9px; }
+  .score-box input { font-size:26px; padding:12px 4px; }
+  .score-stepper { gap:5px; }
+  .score-stepper button { font-size:14px; }
+  .mission-stamps { grid-template-columns:1fr; }
+  .timestamp-note { font-size:11px; }
+}
+@media (max-width:350px) {
+  .score-inputs { grid-template-columns:1fr; }
+  .theme-toggle span:last-child { display:none; }
+  .theme-toggle { width:40px; justify-content:center; }
+  .screen-card .form-group > div { flex-wrap:wrap; }
+  .screen-card .form-group > div .btn-full { width:100% !important; min-height:44px; }
+}
+@media (hover:none) and (pointer:coarse) {
+  button, .round-tab, .h-room-badge { touch-action:manipulation; }
+  .del-btn { min-width:44px; min-height:44px; }
+}
 </style>
 </head>
 <body>
