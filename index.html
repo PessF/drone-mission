@@ -157,6 +157,8 @@ html[data-theme="dark"] .timer-display { background:linear-gradient(135deg,#141c
 
 /* Rounds table */
 table.rounds-table { width:100%; border-collapse:collapse; font-size:13px; }
+.table-scroll { overflow-x:auto; }
+.table-scroll table.rounds-table { min-width:860px; }
 table.rounds-table th, table.rounds-table td { padding:10px 6px; text-align:center; border-bottom:1px solid var(--border); }
 table.rounds-table th { color:var(--muted); font-weight:700; font-size:11px; text-transform:uppercase; }
 table.rounds-table tr.best td { font-weight:800; color:var(--green); }
@@ -164,6 +166,13 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
 .del-btn { background:none; border:none; color:var(--red); cursor:pointer; font-size:16px; padding:4px; }
 .del-btn:hover { opacity:.7; }
 .empty-state { text-align:center; padding:20px; color:var(--muted); font-size:13px; }
+.record-tools { display:flex; gap:8px; flex-wrap:wrap; }
+.record-tools .btn { flex:none; padding:8px 12px; font-size:12px; }
+.record-status { margin-top:10px; padding:9px 12px; border-radius:9px; background:var(--surface-soft);
+  color:var(--muted); font-size:12px; font-weight:700; }
+.record-status.saved { color:var(--green); }
+.record-status.pending { color:#e65100; }
+.record-status.error { color:var(--red); }
 
 /* Countdown number preview on referee screen */
 .countdown-preview { text-align:center; font-size:64px; font-weight:900; color:var(--purple-md); padding:10px 0; }
@@ -300,7 +309,7 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
           <div class="score-inputs">
             <div class="score-box autonomous">
               <label>Autonomous (0–50)</label>
-              <input type="number" id="scoreAuto" min="0" max="50" value="0" oninput="onScoreInput()" />
+              <input type="number" id="scoreAuto" min="0" max="50" value="0" oninput="onScoreInput()" onchange="normalizeScoreInputs()" />
               <div class="score-stepper">
                 <button class="minus" type="button" onclick="adjustScore('auto',-10)">−10</button>
                 <button class="plus" type="button" onclick="adjustScore('auto',10)">+10</button>
@@ -308,7 +317,7 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
             </div>
             <div class="score-box manual">
               <label>Manual (0–50)</label>
-              <input type="number" id="scoreManual" min="0" max="50" value="0" oninput="onScoreInput()" />
+              <input type="number" id="scoreManual" min="0" max="50" value="0" oninput="onScoreInput()" onchange="normalizeScoreInputs()" />
               <div class="score-stepper">
                 <button class="minus" type="button" onclick="adjustScore('manual',-5)">−5</button>
                 <button class="plus" type="button" onclick="adjustScore('manual',5)">+5</button>
@@ -320,13 +329,20 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
             <div class="stn" id="scoreTotal">0</div>
           </div>
           <button class="btn-full gold" id="btnSaveRound" onclick="saveRound()"><svg class="icon"><use href="#i-save"></use></svg>บันทึกคะแนนรอบนี้</button>
+          <div class="record-status" id="recordStatus">ยังไม่มีข้อมูลที่ต้องบันทึก</div>
         </div>
       </div>
 
       <!-- Rounds history -->
       <div class="card">
-        <div class="card-header"><svg class="icon"><use href="#i-clipboard-list"></use></svg>ผลคะแนน (ห้องนี้)</div>
-        <div class="card-body" style="padding:0 18px 18px">
+        <div class="card-header">
+          <span><svg class="icon"><use href="#i-clipboard-list"></use></svg>ผลคะแนนทั้งหมด (ห้องนี้)</span>
+          <div class="record-tools">
+            <button class="btn btn-outline" type="button" onclick="exportRecordsCsv()">Export CSV</button>
+            <button class="btn btn-outline" type="button" onclick="backupRoomJson()">Backup JSON</button>
+          </div>
+        </div>
+        <div class="card-body table-scroll" style="padding:0 18px 18px">
           <table class="rounds-table">
             <thead><tr><th>ทีม</th><th>Round</th><th>คะแนน Auto</th><th>เวลา Auto</th><th>คะแนน Manual</th><th>เวลา Manual</th><th>รวม</th><th>เวลารวม</th><th></th></tr></thead>
             <tbody id="roundsBody"><tr><td colspan="9" class="empty-state">ยังไม่มีข้อมูล</td></tr></tbody>
@@ -403,23 +419,29 @@ const MATCH_MS = 8 * 60 * 1000;
 let db=null, roomRef=null, myRoom=null;
 let curRound = 1;
 let teamName = '';
-let lastSavedTeamName = '';
+let activeDataTeam = '';
 let scoresVisible = false;
 let serverTimeOffsetMs = 0;
+let databaseConnected = false;
+let databaseAccessOk = false;
+let lastDatabaseError = '';
+let allRoundsCache = [];
+let restoringRoom = false;
+let loadedRoundSnapshot = null;
 
 function nowMs(){ return Date.now() + serverTimeOffsetMs; }
 
 /* ── Room / init ── */
 function genRoomCode(){ document.getElementById('roomInput').value = String(Math.floor(1000+Math.random()*9000)); }
 
-function joinRoom(){
+async function joinRoom(){
   const code = document.getElementById('roomInput').value.trim();
   if(!/^\d{4}$/.test(code)){ toast('กรุณากรอกรหัสสนาม 4 หลัก'); return; }
   myRoom = code;
-  initFirebase(HARDCODED_CFG);
   document.getElementById('screenRoom').classList.remove('active');
   document.getElementById('app').classList.add('active');
   document.getElementById('headerRoom').textContent = 'ROOM: ' + myRoom;
+  await initFirebase(HARDCODED_CFG);
 }
 
 function copyRoomCode(){
@@ -427,15 +449,46 @@ function copyRoomCode(){
   navigator.clipboard?.writeText(myRoom).then(()=>toast('คัดลอกรหัสห้องแล้ว'));
 }
 
-function initFirebase(cfg){
+function setSyncState(kind, message){
+  const dot=document.getElementById('syncDot'), txt=document.getElementById('syncTxt');
+  if(dot) dot.classList.toggle('on', kind==='ok');
+  if(txt) txt.textContent=message;
+}
+function setRecordStatus(kind, message){
+  const el=document.getElementById('recordStatus');
+  if(!el) return;
+  el.className='record-status '+(kind||'');
+  el.textContent=message;
+}
+let databaseErrorToastAt=0;
+function reportDatabaseError(error, action){
+  const message=(error && (error.code || error.message)) || 'unknown error';
+  console.error(action || 'Firebase error', error);
+  databaseAccessOk=false;
+  lastDatabaseError=message;
+  setSyncState('error', /permission/i.test(message) ? 'ไม่มีสิทธิ์อ่าน/เขียน Firebase' : 'ซิงก์ข้อมูลไม่สำเร็จ');
+  setRecordStatus('error', 'ข้อมูลยังไม่ถูกบันทึก: '+message);
+  if(Date.now()-databaseErrorToastAt>5000){
+    databaseErrorToastAt=Date.now();
+    toast('Firebase ไม่ยอมรับข้อมูล — กรุณาตรวจสอบ Database Rules');
+  }
+}
+function markDatabaseSuccess(message){
+  databaseAccessOk=true; lastDatabaseError='';
+  if(databaseConnected) setSyncState('ok', message || 'เชื่อมต่อและซิงก์แล้ว');
+}
+
+async function initFirebase(cfg){
   try{
     if(!firebase.apps.length) firebase.initializeApp(cfg);
     db = firebase.database();
     roomRef = db.ref(`rooms/${myRoom}`);
     db.ref('.info/connected').on('value', snap=>{
-      const on = !!snap.val();
-      document.getElementById('syncDot').classList.toggle('on', on);
-      document.getElementById('syncTxt').textContent = on ? 'เชื่อมต่อแล้ว' : 'กำลังเชื่อมต่อ...';
+      databaseConnected=!!snap.val();
+      if(!databaseConnected) setSyncState('offline','ออฟไลน์ — เก็บ Draft ไว้ในเครื่อง');
+      else if(databaseAccessOk) setSyncState('ok','เชื่อมต่อและซิงก์แล้ว');
+      else if(lastDatabaseError) setSyncState('error','เชื่อมต่อแล้ว แต่ไม่มีสิทธิ์เข้าถึงข้อมูล');
+      else setSyncState('pending','เชื่อมต่อแล้ว กำลังตรวจสอบข้อมูล...');
     });
     db.ref('.info/serverTimeOffset').on('value', snap=>{
       const nextOffset = Number(snap.val()) || 0;
@@ -452,13 +505,97 @@ function initFirebase(cfg){
         serverTimeOffsetMs = nextOffset;
       }
     });
+    restoringRoom=true;
+    const snapshots=await Promise.all([
+      roomRef.child('team').once('value'),
+      roomRef.child('timer').once('value')
+    ]);
+    hydrateRoomState(snapshots[0].val(), snapshots[1].val());
+    restoringRoom=false;
+    markDatabaseSuccess('เชื่อมต่อและโหลดข้อมูลแล้ว');
     listenTeam();
-    pushRoundState();
+    listenAllRounds();
     roomRef.child('display/scoresVisible').on('value', snap=>{
       scoresVisible = !!snap.val();
       updateScoreToggleBtn();
-    });
-  }catch(e){ toast('ตั้งค่า Firebase ไม่ถูกต้อง กรุณาตรวจสอบ HARDCODED_CFG'); console.error(e); }
+      markDatabaseSuccess();
+    }, error=>reportDatabaseError(error,'load display state'));
+    await loadRoundIntoInputs(curRound);
+    flushPendingSaves();
+  }catch(e){
+    restoringRoom=false;
+    reportDatabaseError(e,'initialize Firebase');
+    hydrateRoomState(null,null);
+    loadRoundIntoInputs(curRound);
+  }
+}
+
+function hydrateRoomState(teamData,timerData){
+  const localTimer=localGet(sessionLocalKey());
+  const remoteUpdated=Number(timerData && (timerData.updatedAt||timerData.clientUpdatedAt))||0;
+  const usingLocalTimer=!!(localTimer && (!timerData || (Number(localTimer.clientUpdatedAt)||0)>remoteUpdated));
+  if(usingLocalTimer) timerData=localTimer;
+  if(teamData && typeof teamData.name==='string'){
+    teamName=teamData.name;
+    activeDataTeam=teamName.trim();
+    document.getElementById('teamNameInput').value=teamName;
+  }
+  if(!timerData){
+    pushTimerState();
+    return;
+  }
+  const allowed=['idle','connect','connect_paused','countdown','match','done'];
+  phase=allowed.includes(timerData.phase) ? timerData.phase : 'idle';
+  running=!!timerData.running;
+  curRound=timerData.round===2 ? 2 : 1;
+  startTs=Number(timerData.startTs)||0;
+  timerEndTs=Number(timerData.endTs)||0;
+  const restoredRemaining=Number(timerData.remainingMs);
+  remainingMs=Number.isFinite(restoredRemaining) ? Math.max(0,restoredRemaining) : (phase==='match'?MATCH_MS:CONNECT_MS);
+  baseMs=remainingMs;
+  countdownValue=Math.max(0,Number(timerData.countdownValue)||0);
+  countdownDeadlineMs=Number(timerData.countdownEndTs)||0;
+  doneReason=timerData.doneReason||null;
+  autonomousTimeMs=timerData.autonomousTimeMs==null ? null : Number(timerData.autonomousTimeMs);
+  manualTimeMs=timerData.manualTimeMs==null ? null : Number(timerData.manualTimeMs);
+  if(timerData.team && (!activeDataTeam || usingLocalTimer)){
+    teamName=String(timerData.team); activeDataTeam=teamName.trim();
+    document.getElementById('teamNameInput').value=teamName;
+  }
+  reconcileRestoredTimer();
+  document.getElementById('tabRound1').classList.toggle('active',curRound===1);
+  document.getElementById('tabRound2').classList.toggle('active',curRound===2);
+  document.getElementById('scoreRoundLbl').textContent='Round '+curRound;
+  renderTimer(); updateActionButton(); updateTimestampUI();
+  if(usingLocalTimer) pushTimerState();
+}
+
+function reconcileRestoredTimer(){
+  const now=nowMs();
+  if(phase==='countdown'){
+    if(!countdownDeadlineMs) countdownDeadlineMs=now+Math.max(0,countdownValue)*1000;
+    if(countdownDeadlineMs<=now){ startMatchAt(countdownDeadlineMs); return; }
+    if(countdownIv) clearInterval(countdownIv);
+    countdownIv=setInterval(syncCountdown,100);
+    return;
+  }
+  if(!running || !timerEndTs) return;
+  if(timerEndTs>now){
+    remainingMs=timerEndTs-now;
+    if(rafId) cancelAnimationFrame(rafId);
+    rafId=requestAnimationFrame(loop);
+    return;
+  }
+  if(phase==='connect'){
+    const missionStart=timerEndTs+3000;
+    if(missionStart>now){
+      haltTimer(); phase='countdown'; countdownDeadlineMs=missionStart;
+      countdownValue=Math.max(1,Math.ceil((missionStart-now)/1000));
+      countdownIv=setInterval(syncCountdown,100); pushTimerState();
+    } else startMatchAt(missionStart);
+  } else if(phase==='match'){
+    remainingMs=0; running=false; timerEndTs=0; phase='done'; doneReason='timeout'; pushTimerState();
+  }
 }
 
 /* ── Audio (ฝังไฟล์ไว้ใน sounds/countdown.mp3 และ sounds/whistle.mp3) ── */
@@ -468,25 +605,44 @@ function playWhistleSound(){ const a=document.getElementById('whistleAudio'); if
 /* ── Team name ── */
 let teamNameDebounce=null;
 function onTeamNameInput(v){
+  if(phase!=='idle'){
+    document.getElementById('teamNameInput').value=teamName;
+    toast('รีเซ็ตรอบก่อนเปลี่ยนทีม เพื่อป้องกันข้อมูลเวลาปะปน');
+    return;
+  }
+  if(activeDataTeam && normalizeTeamName(activeDataTeam)!==normalizeTeamName(v)) saveDraft(activeDataTeam,curRound);
   teamName = v;
+  saveLocalSession();
   clearTimeout(teamNameDebounce);
   teamNameDebounce = setTimeout(()=>{
-    if(roomRef) roomRef.child('team').set({name:v}).catch(()=>{});
-  }, 300);
+    teamNameDebounce=null;
+    if(!roomRef) return;
+    const next=teamName.trim();
+    activeDataTeam=next;
+    roomRef.update({team:{name:next,updatedAt:firebase.database.ServerValue.TIMESTAMP},'timer/team':next})
+      .then(()=>markDatabaseSuccess()).catch(error=>reportDatabaseError(error,'save team'));
+    loadRoundIntoInputs(curRound);
+  }, 400);
 }
 function listenTeam(){
   roomRef.child('team').on('value', snap=>{
     const d = snap.val();
     if(d && d.name!==undefined && document.activeElement.id!=='teamNameInput'){
+      const changed = teamName !== d.name;
       document.getElementById('teamNameInput').value = d.name;
       teamName = d.name;
+      activeDataTeam=teamName.trim();
+      if(changed && !restoringRoom && phase==='idle') loadRoundIntoInputs(curRound);
     }
-    refreshRoundsTable();
-  });
+    markDatabaseSuccess();
+  }, error=>reportDatabaseError(error,'listen team'));
 }
 
 /* ── Round tabs ── */
 function selectRound(r){
+  if(phase!=='idle'){ toast('รีเซ็ตรอบก่อนเปลี่ยน Round เพื่อป้องกันข้อมูลเวลาปะปน'); return; }
+  if(teamNameDebounce){ toast('รอโหลดข้อมูลทีมให้เสร็จก่อนเปลี่ยน Round'); return; }
+  saveDraft(activeDataTeam||teamName.trim(),curRound);
   curRound = r;
   document.getElementById('tabRound1').classList.toggle('active', r===1);
   document.getElementById('tabRound2').classList.toggle('active', r===2);
@@ -496,7 +652,9 @@ function selectRound(r){
 }
 function pushRoundState(){
   // อัปเดตรอบที่กำลังแข่งขึ้น Firebase ทันทีแบบเรียลไทม์ (ไม่ต้องรอกดปุ่มจับเวลา)
-  if(roomRef) roomRef.child('timer').update({ round: curRound }).catch(()=>{});
+  saveLocalSession();
+  if(roomRef) roomRef.child('timer').update({ round: curRound,clientUpdatedAt:Date.now(),updatedAt:firebase.database.ServerValue.TIMESTAMP })
+    .then(()=>markDatabaseSuccess()).catch(error=>reportDatabaseError(error,'save round selection'));
 }
 
 /* ── Timer state machine ── */
@@ -505,7 +663,7 @@ let phase='idle';
 let running=false;
 let remainingMs=CONNECT_MS;
 let startTs=0, baseMs=0, timerEndTs=0, rafId=null;
-let countdownValue=0, countdownIv=null;
+let countdownValue=0, countdownIv=null, countdownDeadlineMs=0;
 let doneReason=null; // 'manual' | 'completed' | 'timeout'
 let autonomousTimeMs=null, manualTimeMs=null;
 
@@ -578,6 +736,7 @@ function updateActionButton(){
   const btn = document.getElementById('btnPhaseAction');
   const pr = document.getElementById('btnPauseResume');
   if(phase==='idle'){
+    if(teamNameDebounce){ toast('รอโหลดข้อมูลทีมให้เสร็จก่อนเริ่มจับเวลา'); return; }
     btn.innerHTML=ic('play')+'เริ่ม Drone Setup (2:00 นาที)'; btn.className='btn btn-success'; btn.disabled=false; pr.style.display='none';
   } else if(phase==='connect'){
     btn.innerHTML=ic('check')+'ยืนยัน Setup เสร็จแล้ว'; btn.className='btn btn-purple'; btn.disabled=false;
@@ -595,10 +754,20 @@ function updateActionButton(){
       : 'เสร็จสิ้นแล้ว — กด "รีเซ็ต" เพื่อเริ่มรอบใหม่';
     btn.className='btn btn-outline'; btn.disabled=true; pr.style.display='none';
   }
+  const lockIdentity=phase!=='idle';
+  document.getElementById('teamNameInput').disabled=lockIdentity;
+  document.getElementById('tabRound1').style.pointerEvents=lockIdentity?'none':'auto';
+  document.getElementById('tabRound2').style.pointerEvents=lockIdentity?'none':'auto';
 }
 
 function phaseAction(){
-  if(phase==='idle'){ phase='connect'; remainingMs=CONNECT_MS; runTimer(); }
+  if(phase==='idle'){
+    teamName=document.getElementById('teamNameInput').value.trim();
+    activeDataTeam=teamName;
+    if(!teamName){ toast('กรุณากรอกชื่อทีมก่อนเริ่มจับเวลา'); return; }
+    loadedRoundSnapshot=null;
+    phase='connect'; remainingMs=CONNECT_MS; runTimer();
+  }
   else if(phase==='connect'){ haltTimer(); phase='connect_paused'; pushTimerState(); }
   else if(phase==='connect_paused'){ startCountdown321(); }
   else if(phase==='match'){ haltTimer(); phase='done'; doneReason='manual'; pushTimerState(); }
@@ -606,35 +775,51 @@ function phaseAction(){
 }
 
 function startCountdown321(){
+  if(countdownIv){ clearInterval(countdownIv); countdownIv=null; }
   phase='countdown';
   updateActionButton();
-  let n=3;
-  countdownValue=n;
-  pushCountdownState(n);
+  countdownDeadlineMs=nowMs()+3000;
+  countdownValue=3;
+  pushCountdownState(3);
   playCountSound(); // เล่นเสียงนับครั้งเดียวตอนเริ่ม 3-2-1 — ไฟล์เสียงมีคำนับครบอยู่แล้ว ไม่เล่นซ้ำทุกวินาที
   renderTimer();
-  countdownIv = setInterval(()=>{
-    n--;
-    if(n>0){
-      countdownValue=n; pushCountdownState(n); renderTimer();
-    } else {
-      clearInterval(countdownIv); countdownIv=null;
-      countdownValue=0; pushCountdownState(0);
-      playWhistleSound();
-      startMatchPhase();
-    }
-  },1000);
+  countdownIv = setInterval(syncCountdown,100);
+}
+function syncCountdown(){
+  if(phase!=='countdown') return;
+  const n=Math.max(0,Math.ceil((countdownDeadlineMs-nowMs())/1000));
+  if(n>0){
+    if(n!==countdownValue){ countdownValue=n; pushCountdownState(n); renderTimer(); }
+    return;
+  }
+  if(countdownIv){ clearInterval(countdownIv); countdownIv=null; }
+  countdownDeadlineMs=0;
+  countdownValue=0; pushCountdownState(0);
+  playWhistleSound();
+  startMatchPhase();
 }
 function pushCountdownState(n){
+  saveLocalSession();
   if(!roomRef) return;
-  roomRef.child('timer').update({ phase:'countdown', countdownValue:n, team:teamName, round:curRound }).catch(()=>{});
+  roomRef.child('timer').update({ phase:'countdown', running:false, countdownValue:n,
+    countdownEndTs:countdownDeadlineMs||null, team:teamName, round:curRound,
+    clientUpdatedAt:Date.now(),updatedAt:firebase.database.ServerValue.TIMESTAMP
+  }).then(()=>markDatabaseSuccess()).catch(error=>reportDatabaseError(error,'save countdown'));
 }
 
 function startMatchPhase(){
+  startMatchAt(nowMs());
+}
+function startMatchAt(matchStartTs){
   haltTimer();
-  phase='match'; remainingMs=MATCH_MS; autonomousTimeMs=null; manualTimeMs=null; doneReason=null; runTimer();
+  const elapsed=Math.max(0,nowMs()-Number(matchStartTs||nowMs()));
+  phase=elapsed>=MATCH_MS?'done':'match';
+  remainingMs=Math.max(0,MATCH_MS-elapsed);
+  autonomousTimeMs=null; manualTimeMs=null; doneReason=phase==='done'?'timeout':null;
+  countdownDeadlineMs=0; countdownValue=0;
+  if(phase==='match') runTimer(); else pushTimerState();
   renderTimer(); updateActionButton();
-  toast(ic('rocket')+'เริ่ม Mission Run (8 นาที)');
+  toast(phase==='match' ? ic('rocket')+'เริ่ม Mission Run (8 นาที)' : ic('bell')+'Mission Run หมดเวลาระหว่างปิดหน้า');
 }
 function pauseResumeTimer(){
   if(phase!=='match' && phase!=='connect') return;
@@ -644,9 +829,11 @@ function pauseResumeTimer(){
 }
 function resetPhase(){
   if(countdownIv){ clearInterval(countdownIv); countdownIv=null; }
+  countdownDeadlineMs=0;
   haltTimer();
   phase='idle'; remainingMs=CONNECT_MS; baseMs=CONNECT_MS; timerEndTs=0; countdownValue=0; doneReason=null; autonomousTimeMs=null; manualTimeMs=null;
-  resetScoreInputs();
+  loadedRoundSnapshot=null;
+  resetScoreInputs(false);
   pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI();
   toast(ic('rotate')+'รีเซ็ตเวลาและคะแนนแล้ว');
 }
@@ -673,12 +860,14 @@ function updateTimestampUI(){
     const done=value!==null;
     card.classList.toggle('done',done);
     time.textContent=formatMissionTime(value);
-    btn.disabled = done ? phase!=='match' : !active;
+    const canUndoCompleted = done && phase==='done' && doneReason==='completed';
+    btn.disabled = done ? !(phase==='match' || canUndoCompleted) : !active;
     btn.textContent = done ? 'ยกเลิก Timestamp' : ('Timestamp '+(type==='autonomous'?'Autonomous':'Manual'));
     btn.className = 'btn ' + (done ? 'btn-outline' : (type==='autonomous'?'btn-navy':'btn-purple'));
   });
 }
 function toggleMissionStamp(type){
+  const reopenCompletedRun = phase==='done' && doneReason==='completed';
   if(type==='autonomous' && autonomousTimeMs!==null){ autonomousTimeMs=null; doneReason=null; }
   else if(type==='manual' && manualTimeMs!==null){ manualTimeMs=null; doneReason=null; }
   else {
@@ -690,119 +879,348 @@ function toggleMissionStamp(type){
   if(autonomousTimeMs!==null && manualTimeMs!==null && phase==='match'){
     haltTimer(); phase='done'; doneReason='completed';
     toast(ic('check')+'ครบทั้ง Autonomous และ Manual — หยุดเวลาอัตโนมัติ');
+  } else if(reopenCompletedRun) {
+    // Keep the elapsed time, but return to a paused Mission Run so the judge
+    // can correct an accidental timestamp and explicitly resume when ready.
+    phase='match';
+    running=false;
+    timerEndTs=0;
+    toast('ยกเลิก Timestamp แล้ว — กด “ทำงานต่อ” เมื่อต้องการเดินเวลาต่อ');
   }
   pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI();
+  scheduleDraftSave();
 }
 
 function pushTimerState(){
-  if(!roomRef) return;
   const snapshotRemaining = getCurrentRemainingMs();
-  roomRef.child('timer').set({
+  const state={
     phase, running, startTs, endTs: running ? timerEndTs : null,
     remainingMs: Math.round(snapshotRemaining), countdownValue: countdownValue||0,
+    countdownEndTs: phase==='countdown' ? countdownDeadlineMs : null,
     team: teamName, round: curRound, doneReason: doneReason||null,
     autonomousTimeMs, manualTimeMs,
-  }).catch(()=>{});
+    clientUpdatedAt:Date.now(),schemaVersion:3
+  };
+  localSet(sessionLocalKey(),state);
+  if(!roomRef) return;
+  roomRef.child('timer').set({...state,updatedAt:firebase.database.ServerValue.TIMESTAMP})
+    .then(()=>markDatabaseSuccess()).catch(error=>reportDatabaseError(error,'save timer'));
+}
+
+function sessionLocalKey(){ return `ek_session_v3_${myRoom||'room'}`; }
+function saveLocalSession(){
+  const snapshotRemaining=getCurrentRemainingMs();
+  localSet(sessionLocalKey(),{
+    phase,running,startTs,endTs:running?timerEndTs:null,remainingMs:Math.round(snapshotRemaining),
+    countdownValue:countdownValue||0,countdownEndTs:phase==='countdown'?countdownDeadlineMs:null,
+    team:teamName,round:curRound,doneReason:doneReason||null,autonomousTimeMs,manualTimeMs,
+    clientUpdatedAt:Date.now(),schemaVersion:3
+  });
 }
 
 /* ── Score entry ── */
 function clamp50(v){ v=parseInt(v)||0; return Math.max(0, Math.min(50, v)); }
+function normalizeTeamName(value){ return String(value||'').trim().replace(/\s+/g,' ').toLocaleLowerCase(); }
+function hashText(value){
+  let h=2166136261;
+  for(const ch of String(value)){ h^=ch.codePointAt(0); h=Math.imul(h,16777619); }
+  return (h>>>0).toString(36);
+}
+function sanitizeKey(s){ return (s||'team').replace(/[.#$/\[\]]/g,'_'); }
+function teamStorageKey(name){
+  const normalized=normalizeTeamName(name);
+  return sanitizeKey(normalized).slice(0,80)+'--'+hashText(normalized);
+}
+function draftLocalKey(team,r){ return `ek_draft_v3_${myRoom||'room'}_${hashText(normalizeTeamName(team))}_${r}`; }
+function pendingLocalPrefix(){ return `ek_pending_v3_${myRoom||'room'}_`; }
+function localGet(key){ try{ const raw=localStorage.getItem(key); return raw?JSON.parse(raw):null; }catch(_){ return null; } }
+function localSet(key,value){ try{ localStorage.setItem(key,JSON.stringify(value)); }catch(_){} }
+function localRemove(key){ try{ localStorage.removeItem(key); }catch(_){} }
+
+function normalizeScoreInputs(){
+  document.getElementById('scoreAuto').value = clamp50(document.getElementById('scoreAuto').value);
+  document.getElementById('scoreManual').value = clamp50(document.getElementById('scoreManual').value);
+  onScoreInput();
+}
 function adjustScore(type, delta){
   const id = type==='auto' ? 'scoreAuto' : 'scoreManual';
   const input = document.getElementById(id);
   input.value = clamp50((parseInt(input.value)||0) + delta);
   onScoreInput();
 }
-function resetScoreInputs(){
+function resetScoreInputs(persist=true){
   document.getElementById('scoreAuto').value=0;
   document.getElementById('scoreManual').value=0;
-  onScoreInput();
+  onScoreInput(persist);
 }
-let liveScoreDebounce=null;
-function onScoreInput(){
+let workingStateDebounce=null;
+let loadingRound=false;
+function buildDraft(team=activeDataTeam||teamName.trim(),r=curRound){
+  const a = clamp50(document.getElementById('scoreAuto').value);
+  const m = clamp50(document.getElementById('scoreManual').value);
+  const timing=getRecordedTiming(team,r);
+  return {
+    team:String(team||'').trim(), round:r, autonomousScore:a, manualScore:m, totalScore:a+m,
+    autonomousTimeMs:timing.autonomousTimeMs, manualTimeMs:timing.manualTimeMs,
+    matchTimeUsedMs:timing.matchTimeUsedMs,
+    completionStatus:(timing.autonomousTimeMs!==null&&timing.manualTimeMs!==null?'completed':timing.completionStatus||'draft'),
+    clientUpdatedAt:Date.now(), schemaVersion:3
+  };
+}
+function getRecordedTiming(team=activeDataTeam||teamName.trim(),r=curRound){
+  const loaded=loadedRoundSnapshot;
+  if(phase==='idle' && loaded && loaded.round===r && normalizeTeamName(loaded.team)===normalizeTeamName(team)){
+    return {
+      autonomousTimeMs:loaded.autonomousTimeMs==null?null:Number(loaded.autonomousTimeMs),
+      manualTimeMs:loaded.manualTimeMs==null?null:Number(loaded.manualTimeMs),
+      matchTimeUsedMs:Math.max(0,Number(loaded.matchTimeUsedMs)||0),
+      completionStatus:loaded.completionStatus||null
+    };
+  }
+  return {
+    autonomousTimeMs,manualTimeMs,
+    matchTimeUsedMs:(phase==='match'||phase==='done')?getMatchElapsedMs():0,
+    completionStatus:doneReason||null
+  };
+}
+function saveLocalDraft(team=activeDataTeam||teamName.trim(),r=curRound){
+  if(!team || loadingRound) return null;
+  const draft=buildDraft(team,r);
+  localSet(draftLocalKey(team,r),draft);
+  setRecordStatus('pending','มี Draft สำรองในเครื่อง — กำลังซิงก์ Firebase...');
+  return draft;
+}
+function onScoreInput(persist=true){
   const a = clamp50(document.getElementById('scoreAuto').value);
   const m = clamp50(document.getElementById('scoreManual').value);
   document.getElementById('scoreTotal').textContent = a+m;
-  clearTimeout(liveScoreDebounce);
-  liveScoreDebounce = setTimeout(()=>{
-    if(roomRef) roomRef.child('liveScore').set({
-      autonomousScore:a, manualScore:m, totalScore:a+m, team:teamName, round:curRound, updatedAt:Date.now()
-    }).catch(()=>{});
-  }, 250);
+  if(!persist || loadingRound) return;
+  saveLocalDraft();
+  scheduleDraftSave();
+}
+function scheduleDraftSave(){
+  clearTimeout(workingStateDebounce);
+  workingStateDebounce=setTimeout(()=>saveDraft(),300);
+}
+function saveDraft(team=activeDataTeam||teamName.trim(),r=curRound){
+  if(!team || loadingRound) return Promise.resolve();
+  const draft=saveLocalDraft(team,r) || buildDraft(team,r);
+  if(!roomRef) return Promise.resolve();
+  const key=teamStorageKey(team);
+  const updates={};
+  updates[`drafts/${key}/round${r}`]={...draft,updatedAt:firebase.database.ServerValue.TIMESTAMP};
+  if(normalizeTeamName(team)===normalizeTeamName(activeDataTeam||teamName)){
+    updates.liveScore={
+      autonomousScore:draft.autonomousScore,manualScore:draft.manualScore,totalScore:draft.totalScore,
+      team:draft.team,round:r,updatedAt:firebase.database.ServerValue.TIMESTAMP
+    };
+  }
+  return roomRef.update(updates).then(()=>{
+    markDatabaseSuccess();
+    setRecordStatus('saved','Draft ซิงก์กับ Firebase แล้ว');
+  }).catch(error=>{ reportDatabaseError(error,'save draft'); return false; });
 }
 
 let savingRound=false;
+let savingRoundUiTimer=null;
 let roundsRequestSeq=0;
 let loadRoundRequestSeq=0;
 function saveRound(){
   if(!roomRef){ toast('กรุณาเข้าห้องก่อน'); return; }
   if(savingRound) return;
+  if(teamNameDebounce){ toast('รอโหลดข้อมูลทีมให้เสร็จก่อนบันทึก'); return; }
   if(!teamName.trim()){ toast('กรุณากรอกชื่อทีมก่อน'); return; }
   const teamSnapshot = teamName.trim();
+  clearTimeout(workingStateDebounce);
   const a = clamp50(document.getElementById('scoreAuto').value);
   const m = clamp50(document.getElementById('scoreManual').value);
+  document.getElementById('scoreAuto').value = a;
+  document.getElementById('scoreManual').value = m;
   const total = a+m;
-  const matchTimeUsedMs = (phase==='match' || phase==='done') ? getMatchElapsedMs() : 0;
-  const entry = { team: teamSnapshot, round:curRound, autonomousScore:a, manualScore:m, totalScore:total, autonomousTimeMs, manualTimeMs, matchTimeUsedMs, completionStatus:(autonomousTimeMs!==null&&manualTimeMs!==null?'completed':doneReason||'incomplete'), submittedAt: firebase.database.ServerValue.TIMESTAMP, clientSubmittedAt:Date.now(), schemaVersion:2 };
+  const timing=getRecordedTiming(teamSnapshot,curRound);
+  const entry = { team: teamSnapshot, round:curRound, autonomousScore:a, manualScore:m, totalScore:total,
+    autonomousTimeMs:timing.autonomousTimeMs, manualTimeMs:timing.manualTimeMs, matchTimeUsedMs:timing.matchTimeUsedMs,
+    completionStatus:(timing.autonomousTimeMs!==null&&timing.manualTimeMs!==null?'completed':timing.completionStatus||'incomplete'),
+    submittedAt: firebase.database.ServerValue.TIMESTAMP, clientSubmittedAt:Date.now(), schemaVersion:3 };
   const savedRound = curRound;
+  const teamKey=teamStorageKey(teamSnapshot);
+  const revisionRef=roomRef.child('record_history').push();
+  const revisionId=revisionRef.key;
+  const pendingKey=pendingLocalPrefix()+revisionId;
+  const pending={teamKey,round:savedRound,revisionId,entry:{...entry,submittedAt:null}};
+  localSet(pendingKey,pending);
+  localSet(draftLocalKey(teamSnapshot,savedRound),buildDraft(teamSnapshot,savedRound));
   const saveBtn=document.getElementById('btnSaveRound');
   savingRound=true;
+  setRecordStatus('pending','บันทึกสำรองในเครื่องแล้ว — รอ Firebase ยืนยัน...');
   if(saveBtn){ saveBtn.disabled=true; saveBtn.innerHTML=ic('hourglass')+'กำลังบันทึก...'; }
-  roomRef.child(`teams_rounds/${sanitizeKey(teamSnapshot)}/round${curRound}`).set(entry)
+  clearTimeout(savingRoundUiTimer);
+  savingRoundUiTimer=setTimeout(()=>{
+    if(!savingRound) return;
+    savingRound=false;
+    if(saveBtn){ saveBtn.disabled=false; saveBtn.innerHTML=ic('save')+'บันทึกคะแนนรอบนี้'; }
+    setRecordStatus('pending','Firebase ยังไม่ตอบกลับ — เก็บรายการรอส่งไว้ในเครื่องแล้ว');
+  },5000);
+  const updates={};
+  updates[`teams_rounds/${teamKey}/round${savedRound}`]=entry;
+  updates[`record_history/${revisionId}`]={...entry,revisionId,teamKey,action:'save'};
+  updates[`drafts/${teamKey}/round${savedRound}`]=null;
+  updates.liveScore={autonomousScore:a,manualScore:m,totalScore:total,team:teamSnapshot,round:savedRound,updatedAt:firebase.database.ServerValue.TIMESTAMP};
+  roomRef.update(updates)
     .then(()=>{
-      lastSavedTeamName = teamSnapshot;
+      localRemove(pendingKey);
+      localRemove(draftLocalKey(teamSnapshot,savedRound));
+      loadedRoundSnapshot={...entry,submittedAt:Date.now()};
+      markDatabaseSuccess();
+      setRecordStatus('saved','บันทึกคะแนน Round '+savedRound+' และเก็บประวัติแก้ไขแล้ว');
       toast(ic('save')+'บันทึกคะแนน Round '+savedRound+' แล้ว');
-      refreshRoundsTable(teamSnapshot);
     })
-    .catch(e=>{ console.error(e); toast('บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อ'); })
+    .catch(e=>{ reportDatabaseError(e,'save round'); toast('ยังส่ง Firebase ไม่สำเร็จ — มีสำเนารอส่งอยู่ในเครื่อง'); })
     .finally(()=>{
+      clearTimeout(savingRoundUiTimer);
       savingRound=false;
       if(saveBtn){ saveBtn.disabled=false; saveBtn.innerHTML=ic('save')+'บันทึกคะแนนรอบนี้'; }
     });
 }
-function sanitizeKey(s){ return (s||'team').replace(/[.#$/\[\]]/g,'_'); }
 
-function loadRoundIntoInputs(r){
-  const requestId=++loadRoundRequestSeq;
-  if(!roomRef || !teamName){ document.getElementById('scoreAuto').value=0; document.getElementById('scoreManual').value=0; onScoreInput(); return; }
-  roomRef.child(`teams_rounds/${sanitizeKey(teamName)}/round${r}`).once('value').then(snap=>{
-    if(requestId!==loadRoundRequestSeq || r!==curRound) return;
-    const d = snap.val();
-    document.getElementById('scoreAuto').value = d ? d.autonomousScore : 0;
-    document.getElementById('scoreManual').value = d ? d.manualScore : 0;
-    onScoreInput();
-  });
+async function flushPendingSaves(){
+  if(!roomRef) return;
+  let keys=[];
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(key && key.startsWith(pendingLocalPrefix())) keys.push(key);
+    }
+  }catch(_){ return; }
+  const queue=keys.map(localKey=>({localKey,pending:localGet(localKey)}))
+    .filter(item=>item.pending&&item.pending.entry)
+    .sort((a,b)=>(Number(a.pending.entry.clientSubmittedAt)||0)-(Number(b.pending.entry.clientSubmittedAt)||0));
+  for(const {localKey,pending} of queue){
+    const entry={...pending.entry,submittedAt:firebase.database.ServerValue.TIMESTAMP,recoveredFromLocal:true};
+    const updates={};
+    updates[`teams_rounds/${pending.teamKey}/round${pending.round}`]=entry;
+    updates[`record_history/${pending.revisionId}`]={...entry,revisionId:pending.revisionId,teamKey:pending.teamKey,action:'recovered-save'};
+    updates[`drafts/${pending.teamKey}/round${pending.round}`]=null;
+    try{
+      await roomRef.update(updates);
+      localRemove(localKey);
+      localRemove(draftLocalKey(entry.team,pending.round));
+      markDatabaseSuccess(); setRecordStatus('saved','กู้คืนและซิงก์รายการที่ค้างแล้ว');
+    }catch(error){
+      reportDatabaseError(error,'recover pending save');
+      break;
+    }
+  }
 }
 
-function refreshRoundsTable(teamOverride=''){
+async function loadRoundIntoInputs(r){
+  const requestId=++loadRoundRequestSeq;
+  const targetTeam=(activeDataTeam||teamName).trim();
+  if(!targetTeam){
+    loadingRound=true; document.getElementById('scoreAuto').value=0; document.getElementById('scoreManual').value=0; loadingRound=false; onScoreInput(false); return;
+  }
+  const key=teamStorageKey(targetTeam), legacyKey=sanitizeKey(targetTeam);
+  const localDraft=localGet(draftLocalKey(targetTeam,r));
+  if(!roomRef){ applyLoadedRound(localDraft,localDraft?'local':null,r,requestId); return; }
+  try{
+    const reads=[roomRef.child(`drafts/${key}/round${r}`).once('value'),roomRef.child(`teams_rounds/${key}/round${r}`).once('value')];
+    if(legacyKey!==key) reads.push(roomRef.child(`teams_rounds/${legacyKey}/round${r}`).once('value'));
+    const snaps=await Promise.all(reads);
+    if(requestId!==loadRoundRequestSeq || r!==curRound) return;
+    const remoteDraft=snaps[0].val();
+    const saved=snaps[1].val() || (snaps[2] && snaps[2].val());
+    const drafts=[localDraft,remoteDraft].filter(Boolean).sort((a,b)=>(Number(b.clientUpdatedAt)||0)-(Number(a.clientUpdatedAt)||0));
+    const newestDraft=drafts[0]||null;
+    const savedAt=Number(saved && (saved.clientSubmittedAt||saved.submittedAt))||0;
+    const useDraft=newestDraft && (Number(newestDraft.clientUpdatedAt)||0)>=savedAt;
+    applyLoadedRound(useDraft?newestDraft:saved,useDraft?'draft':(saved?'saved':null),r,requestId);
+    markDatabaseSuccess();
+  }catch(error){
+    if(requestId!==loadRoundRequestSeq) return;
+    reportDatabaseError(error,'load round');
+    applyLoadedRound(localDraft,localDraft?'local':null,r,requestId);
+  }
+}
+function applyLoadedRound(data,source,r,requestId){
+  if(requestId!==loadRoundRequestSeq || r!==curRound) return;
+  loadingRound=true;
+  loadedRoundSnapshot=data?{...data,team:(data.team||targetVisibleTeam()),round:r}:null;
+  document.getElementById('scoreAuto').value=data?clamp50(data.autonomousScore):0;
+  document.getElementById('scoreManual').value=data?clamp50(data.manualScore):0;
+  loadingRound=false; onScoreInput(false);
+  if(roomRef && normalizeTeamName(targetVisibleTeam())===normalizeTeamName(activeDataTeam||teamName)){
+    roomRef.child('liveScore').set({
+      autonomousScore:clamp50(data&&data.autonomousScore),manualScore:clamp50(data&&data.manualScore),
+      totalScore:clamp50(data&&data.autonomousScore)+clamp50(data&&data.manualScore),
+      team:(activeDataTeam||teamName).trim(),round:r,updatedAt:firebase.database.ServerValue.TIMESTAMP
+    }).then(()=>markDatabaseSuccess()).catch(error=>reportDatabaseError(error,'restore live score'));
+  }
+  if(source==='local') setRecordStatus('pending','กู้ Draft จากเครื่องแล้ว — รอเชื่อมต่อ Firebase');
+  else if(source==='draft') setRecordStatus('pending','โหลด Draft ที่ยังไม่ได้ยืนยันคะแนน');
+  else if(source==='saved') setRecordStatus('saved','โหลดคะแนนที่บันทึกแล้ว');
+  else setRecordStatus('','ยังไม่มีข้อมูลของทีมนี้ใน Round '+r);
+}
+function targetVisibleTeam(){ return (activeDataTeam||teamName||'').trim(); }
+
+function listenAllRounds(){
+  roomRef.child('teams_rounds').on('value',snap=>{
+    renderAllRounds(snap.val()||{}); markDatabaseSuccess();
+  },error=>reportDatabaseError(error,'listen all records'));
+}
+function flattenAllRounds(data){
+  const deduped=new Map();
+  Object.entries(data||{}).forEach(([teamKey,rounds])=>{
+    if(!rounds || typeof rounds!=='object') return;
+    [1,2].forEach(round=>{
+      const rd=rounds['round'+round]; if(!rd) return;
+      const row={...rd,round,_teamKey:teamKey,_sourceKeys:[teamKey]};
+      const id=normalizeTeamName(row.team||teamKey)+'|'+round;
+      const previous=deduped.get(id);
+      const stamp=Number(row.clientSubmittedAt||row.submittedAt)||0;
+      const previousStamp=Number(previous&&(previous.clientSubmittedAt||previous.submittedAt))||0;
+      if(!previous) deduped.set(id,row);
+      else if(stamp>=previousStamp) deduped.set(id,{...row,_sourceKeys:[...new Set([...previous._sourceKeys,teamKey])]});
+      else previous._sourceKeys=[...new Set([...previous._sourceKeys,teamKey])];
+    });
+  });
+  return [...deduped.values()].sort((a,b)=>String(a.team||'').localeCompare(String(b.team||''),'th',{numeric:true}) || a.round-b.round);
+}
+function rankCompare(a,b){
+  const totalA=clamp50(a.autonomousScore)+clamp50(a.manualScore), totalB=clamp50(b.autonomousScore)+clamp50(b.manualScore);
+  return totalB-totalA || (a.matchTimeUsedMs??MATCH_MS)-(b.matchTimeUsedMs??MATCH_MS) ||
+    (b.autonomousScore||0)-(a.autonomousScore||0) || (a.autonomousTimeMs??MATCH_MS)-(b.autonomousTimeMs??MATCH_MS) ||
+    (b.manualScore||0)-(a.manualScore||0) || (a.manualTimeMs??MATCH_MS)-(b.manualTimeMs??MATCH_MS);
+}
+function renderAllRounds(data){
+  allRoundsCache=flattenAllRounds(data);
+  const tbody=document.getElementById('roundsBody');
+  if(!allRoundsCache.length){ tbody.innerHTML='<tr><td colspan="9" class="empty-state">ยังไม่มีข้อมูล</td></tr>'; return; }
+  const bestByTeam=new Map();
+  allRoundsCache.forEach(row=>{
+    const key=normalizeTeamName(row.team);
+    if(!bestByTeam.has(key) || rankCompare(row,bestByTeam.get(key))<0) bestByTeam.set(key,row);
+  });
+  tbody.innerHTML=allRoundsCache.map((row,index)=>{
+    const best=bestByTeam.get(normalizeTeamName(row.team))===row;
+    return `<tr class="${best?'best':''}">
+      <td class="team-cell">${escapeHtml(row.team||'—')}</td>
+      <td>Round ${row.round}${best?(' '+ic('trophy','icon-only')):''}</td>
+      <td>${clamp50(row.autonomousScore)}</td><td>${formatMissionTime(row.autonomousTimeMs)}</td>
+      <td>${clamp50(row.manualScore)}</td><td>${formatMissionTime(row.manualTimeMs)}</td>
+      <td>${clamp50(row.autonomousScore)+clamp50(row.manualScore)}</td><td>${formatMissionTime(row.matchTimeUsedMs)}</td>
+      <td><button class="del-btn" onclick="confirmDeleteRound(${index})" title="ลบ">${ic('trash','icon-only')}</button></td>
+    </tr>`;
+  }).join('');
+}
+function refreshRoundsTable(){
   const requestId=++roundsRequestSeq;
-  const targetTeam = (teamOverride || teamName || lastSavedTeamName || '').trim();
-  if(!roomRef || !targetTeam){
+  if(!roomRef){
     document.getElementById('roundsBody').innerHTML = '<tr><td colspan="9" class="empty-state">ยังไม่มีข้อมูล</td></tr>';
     return;
   }
-  roomRef.child(`teams_rounds/${sanitizeKey(targetTeam)}`).once('value').then(snap=>{
+  roomRef.child('teams_rounds').once('value').then(snap=>{
     if(requestId!==roundsRequestSeq) return;
-    const d = snap.val() || {};
-    const rows = [];
-    [[1,d.round1],[2,d.round2]].forEach(([n,rd])=>{ if(rd) rows.push({n, ...rd}); });
-    const tbody = document.getElementById('roundsBody');
-    if(rows.length===0){ tbody.innerHTML = '<tr><td colspan="9" class="empty-state">ยังไม่มีข้อมูล</td></tr>'; return; }
-    const rankCompare=(a,b)=> (b.totalScore||0)-(a.totalScore||0) || (a.matchTimeUsedMs??MATCH_MS)-(b.matchTimeUsedMs??MATCH_MS) || (b.autonomousScore||0)-(a.autonomousScore||0) || (a.autonomousTimeMs??MATCH_MS)-(b.autonomousTimeMs??MATCH_MS) || (b.manualScore||0)-(a.manualScore||0) || (a.manualTimeMs??MATCH_MS)-(b.manualTimeMs??MATCH_MS);
-    const bestRow=[...rows].sort(rankCompare)[0];
-    const bestIdx=rows.indexOf(bestRow);
-    tbody.innerHTML = rows.map((r,i)=>`
-      <tr class="${i===bestIdx?'best':''}">
-        <td class="team-cell">${escapeHtml(r.team || teamName)}</td>
-        <td>Round ${r.n}${i===bestIdx?(' '+ic('trophy','icon-only')):''}</td>
-        <td>${r.autonomousScore}</td>
-        <td>${formatMissionTime(r.autonomousTimeMs)}</td>
-        <td>${r.manualScore}</td>
-        <td>${formatMissionTime(r.manualTimeMs)}</td>
-        <td>${r.totalScore}</td>
-        <td>${formatMissionTime(r.matchTimeUsedMs||0)}</td>
-        <td><button class="del-btn" onclick="confirmDeleteRound(${r.n})" title="ลบ">${ic('trash','icon-only')}</button></td>
-      </tr>`).join('');
+    renderAllRounds(snap.val()||{});
   }).catch(e=>{
     if(requestId!==roundsRequestSeq) return;
     console.error(e);
@@ -811,12 +1229,39 @@ function refreshRoundsTable(teamOverride=''){
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function confirmDeleteRound(n){
-  if(!teamName) return;
-  if(!confirm(`ยืนยันลบคะแนน Round ${n} ของทีม "${teamName}" ใช่หรือไม่?\nการลบไม่สามารถย้อนกลับได้`)) return;
-  roomRef.child(`teams_rounds/${sanitizeKey(teamName)}/round${n}`).remove()
-    .then(()=>{ toast('ลบคะแนน Round '+n+' แล้ว'); refreshRoundsTable(); if(curRound===n) loadRoundIntoInputs(n); })
-    .catch(()=>toast('ลบไม่สำเร็จ'));
+function confirmDeleteRound(index){
+  const row=allRoundsCache[index]; if(!row || !roomRef) return;
+  if(!confirm(`ยืนยันนำคะแนน Round ${row.round} ของทีม "${row.team}" ออกจากตารางใช่หรือไม่?\nระบบยังเก็บสำเนาไว้ในประวัติการแก้ไข`)) return;
+  const revisionRef=roomRef.child('record_history').push();
+  const cleanRow={...row}; delete cleanRow._teamKey; delete cleanRow._sourceKeys; delete cleanRow.round;
+  const updates={};
+  (row._sourceKeys||[row._teamKey]).forEach(key=>{ updates[`teams_rounds/${key}/round${row.round}`]=null; });
+  updates[`record_history/${revisionRef.key}`]={action:'delete',revisionId:revisionRef.key,teamKey:row._teamKey,team:row.team,round:row.round,previous:cleanRow,deletedAt:firebase.database.ServerValue.TIMESTAMP};
+  roomRef.update(updates).then(()=>{
+    toast('นำคะแนนออกแล้ว (ประวัติยังคงอยู่)'); markDatabaseSuccess();
+    if(normalizeTeamName(row.team)===normalizeTeamName(activeDataTeam) && curRound===row.round) loadRoundIntoInputs(row.round);
+  }).catch(error=>reportDatabaseError(error,'delete round'));
+}
+
+function csvCell(value){ const s=String(value==null?'':value); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
+function downloadText(filename,text,type){
+  const blob=new Blob([text],{type:type||'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+function exportRecordsCsv(){
+  if(!allRoundsCache.length){ toast('ยังไม่มีข้อมูลให้ Export'); return; }
+  const header=['Team','Round','Autonomous Score','Autonomous Time','Manual Score','Manual Time','Total','Match Time','Status','Submitted At'];
+  const rows=allRoundsCache.map(r=>[r.team,r.round,clamp50(r.autonomousScore),formatMissionTime(r.autonomousTimeMs),clamp50(r.manualScore),formatMissionTime(r.manualTimeMs),clamp50(r.autonomousScore)+clamp50(r.manualScore),formatMissionTime(r.matchTimeUsedMs),r.completionStatus||'',r.submittedAt?new Date(r.submittedAt).toISOString():'']);
+  downloadText(`drone-mission-room-${myRoom}.csv`,'\uFEFF'+[header,...rows].map(row=>row.map(csvCell).join(',')).join('\n'),'text/csv;charset=utf-8');
+}
+async function backupRoomJson(){
+  if(!roomRef){ toast('กรุณาเข้าห้องก่อน'); return; }
+  try{
+    const snap=await roomRef.once('value');
+    downloadText(`drone-mission-room-${myRoom}-backup.json`,JSON.stringify({room:myRoom,exportedAt:new Date().toISOString(),data:snap.val()},null,2),'application/json;charset=utf-8');
+    toast('ดาวน์โหลด Backup JSON แล้ว');
+  }catch(error){ reportDatabaseError(error,'backup room'); }
 }
 
 /* ── Display push ── */
@@ -860,6 +1305,18 @@ window.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('themeIcon').innerHTML = cur==='dark' ? ic('sun',true) : ic('moon',true);
   document.getElementById('themeLabel').textContent = cur==='dark' ? 'Light Mode' : 'Dark Mode';
 });
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState!=='visible'){
+    saveLocalDraft(); saveLocalSession(); return;
+  }
+  if(phase==='countdown') syncCountdown();
+  if(running){
+    if(rafId) cancelAnimationFrame(rafId);
+    rafId=null;
+    loop();
+  }
+});
+window.addEventListener('pagehide',()=>{ saveLocalDraft(); saveLocalSession(); });
 
 /* ── Toast ── */
 let toastTimer=null;

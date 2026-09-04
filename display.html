@@ -181,10 +181,11 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
   <div class="eyebrow">EasyKids Robotics</div>
   <div class="brand">DRONE MISSION CHALLENGE</div>
   <div class="prompt-lbl">กรอกรหัสสนาม (Room Code) เพื่อเข้าใช้งาน</div>
-  <input id="roomCodeInput" type="text" inputmode="numeric" maxlength="8" placeholder="เช่น 1234"
+  <input id="roomCodeInput" type="text" inputmode="numeric" maxlength="4" placeholder="เช่น 1234"
+    oninput="this.value=this.value.replace(/[^0-9]/g,'')"
     onkeydown="if(event.key==='Enter') submitRoomCode()" />
   <button id="roomEntrySubmit" onclick="submitRoomCode()">เข้าสู่ระบบ</button>
-  <div id="roomCodeError">กรุณากรอกรหัสสนามก่อนเข้าใช้งาน</div>
+  <div id="roomCodeError">กรุณากรอกรหัสสนาม 4 หลัก</div>
 </div>
 
 <img id="logoLeft" class="corner-logo left" src="logos/logo-left.png" alt="" onerror="this.style.display='none'" />
@@ -261,21 +262,37 @@ const HARDCODED_CFG = {
 let db=null, roomRef=null, myRoom=null;
 let rafId=null;
 let lastPhase=null, lastCountdownValue=null;
+let countdownWhistlePlayed=false;
 let serverTimeOffsetMs=0;
+let displayAccessError=false;
 
 function nowMs(){ return Date.now()+serverTimeOffsetMs; }
 
 function getRoomFromUrl(){
   const p = new URLSearchParams(location.search);
-  return p.get('room');
+  const room = (p.get('room') || '').trim();
+  return /^\d{4}$/.test(room) ? room : null;
 }
 
 /* ── Settings: audio (โลโก้ฝังตรงผ่าน src ในหน้า HTML แล้ว ไม่ต้องอัปโหลด) ── */
 function toggleSettings(){ document.getElementById('settingsPanel').classList.toggle('show'); }
 function playCountSound(){ const a=document.getElementById('countAudio'); if(a && a.src){ a.pause(); a.currentTime=0; a.play().catch(()=>{}); } }
 function playWhistleSound(){ const a=document.getElementById('whistleAudio'); if(a && a.src){ a.pause(); a.currentTime=0; a.play().catch(()=>{}); } }
+function unlockAudio(){
+  ['countAudio','whistleAudio'].forEach(id=>{
+    const a=document.getElementById(id);
+    if(!a || !a.src) return;
+    const wasMuted=a.muted;
+    a.muted=true;
+    const attempt=a.play();
+    if(attempt && attempt.then) attempt.then(()=>{
+      a.pause(); a.currentTime=0; a.muted=wasMuted;
+    }).catch(()=>{ a.muted=wasMuted; });
+  });
+}
 
 function startDisplay(){
+  unlockAudio();
   document.getElementById('tapOverlay').classList.add('hide');
   const urlRoom = getRoomFromUrl();
   if(urlRoom){
@@ -291,7 +308,7 @@ function submitRoomCode(){
   const input = document.getElementById('roomCodeInput');
   const val = (input.value || '').trim();
   const err = document.getElementById('roomCodeError');
-  if(!val){
+  if(!/^\d{4}$/.test(val)){
     err.classList.add('show'); // ต้องกรอกรหัสก่อน ยังเข้าดูจอไม่ได้จนกว่าจะกรอก
     input.focus();
     return;
@@ -302,9 +319,21 @@ function submitRoomCode(){
   boot(val);
 }
 
+function reportDisplayDatabaseError(error){
+  console.error('Firebase display sync failed',error);
+  const message=(error&&(error.code||error.message))||'unknown error';
+  const denied=/permission/i.test(message);
+  displayAccessError=true;
+  document.getElementById('statusDot').classList.remove('on');
+  document.getElementById('statusTxt').textContent=denied?'ไม่มีสิทธิ์อ่าน Firebase':'ซิงก์ข้อมูลไม่สำเร็จ';
+  const banner=document.getElementById('connBanner');
+  banner.textContent=denied?'Firebase ปฏิเสธการอ่านข้อมูล — ตรวจสอบ Realtime Database Rules':'ขาดการเชื่อมต่อ กำลังพยายามเชื่อมต่อใหม่...';
+  banner.classList.add('show');
+}
+
 function boot(providedRoom){
   myRoom = providedRoom || getRoomFromUrl();
-  if(!myRoom) return;
+  if(!/^\d{4}$/.test(myRoom || '')) return;
   document.getElementById('roomBadge').textContent = 'ROOM: ' + myRoom;
   if(!firebase.apps.length) firebase.initializeApp(HARDCODED_CFG);
   db = firebase.database();
@@ -312,9 +341,9 @@ function boot(providedRoom){
 
   db.ref('.info/connected').on('value', snap=>{
     const on = !!snap.val();
-    document.getElementById('statusDot').classList.toggle('on', on);
-    document.getElementById('statusTxt').textContent = on ? 'เชื่อมต่อแล้ว' : 'กำลังเชื่อมต่อ...';
-    document.getElementById('connBanner').classList.toggle('show', !on);
+    document.getElementById('statusDot').classList.toggle('on', on && !displayAccessError);
+    document.getElementById('statusTxt').textContent = displayAccessError ? 'ไม่มีสิทธิ์อ่าน Firebase' : (on ? 'เชื่อมต่อแล้ว' : 'กำลังเชื่อมต่อ...');
+    document.getElementById('connBanner').classList.toggle('show', !on || displayAccessError);
   });
   db.ref('.info/serverTimeOffset').on('value', snap=>{
     serverTimeOffsetMs = Number(snap.val()) || 0;
@@ -323,13 +352,13 @@ function boot(providedRoom){
   roomRef.child('team').on('value', snap=>{
     const d = snap.val();
     document.getElementById('teamNameDisp').textContent = (d && d.name) ? d.name : '— รอทีมถัดไป —';
-  });
+  },reportDisplayDatabaseError);
 
-  roomRef.child('timer').on('value', snap=> handleTimer(snap.val()));
+  roomRef.child('timer').on('value', snap=> handleTimer(snap.val()),reportDisplayDatabaseError);
 
   roomRef.child('display/scoresVisible').on('value', snap=>{
     togglePanels(!!snap.val());
-  });
+  },reportDisplayDatabaseError);
 
   roomRef.child('liveScore').on('value', snap=>{
     const d = snap.val();
@@ -337,7 +366,7 @@ function boot(providedRoom){
     bumpSet('scoreAutoDisp', d.autonomousScore);
     bumpSet('scoreManualDisp', d.manualScore);
     bumpSet('scoreTotalDisp', d.totalScore);
-  });
+  },reportDisplayDatabaseError);
 }
 
 function bumpSet(id, val){
@@ -377,6 +406,7 @@ function handleTimer(d){
     overlay.classList.add('show');
     const n = d.countdownValue;
     const enteringFreshCountdown = (previousPhase !== 'countdown');
+    if(enteringFreshCountdown) countdownWhistlePlayed=false;
     if(n !== lastCountdownValue){
       lastCountdownValue = n;
       const numEl = document.getElementById('countdownNum');
@@ -387,14 +417,21 @@ function handleTimer(d){
       } else {
         numEl.textContent = 'GO!'; numEl.classList.add('go');
         document.getElementById('countdownSub').textContent = 'เริ่ม Mission Run!';
-        playWhistleSound();
+        if(!countdownWhistlePlayed){ playWhistleSound(); countdownWhistlePlayed=true; }
       }
     }
   } else {
     overlay.classList.remove('show');
     lastCountdownValue = null;
   }
+  // The controller may replace countdown=0 with match before Firebase delivers
+  // the intermediate packet. Preserve the start whistle on that fast path.
+  if(previousPhase==='countdown' && phase==='match' && !countdownWhistlePlayed){
+    playWhistleSound();
+    countdownWhistlePlayed=true;
+  }
   if(previousPhase==='match' && phase==='done' && d.doneReason==='timeout') playWhistleSound();
+  if(phase!=='countdown' && phase!=='match') countdownWhistlePlayed=false;
   lastPhase = phase;
 
   if(rafId){ cancelAnimationFrame(rafId); rafId=null; }
@@ -444,9 +481,8 @@ function renderBigTimer(ms){
   el.classList.toggle('danger', totalMs<=10000 && totalMs>0);
 }
 
-window.addEventListener('DOMContentLoaded', ()=>{
-  if(getRoomFromUrl()) startDisplay();
-});
+// Keep the tap-to-start screen even when the room is present in the URL.
+// Browsers require a real user gesture before remote-triggered audio can play.
 </script>
 </body>
 </html>
