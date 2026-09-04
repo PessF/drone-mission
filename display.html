@@ -157,7 +157,16 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
 #timerView{ width:100%; text-align:center; }
 
 /* Responsive public display: phones, tablets, TVs, and short landscape screens. */
-@media (max-width:700px) {
+@media (min-width:821px) and (max-width:1180px) {
+  #mainView{ padding:76px 28px 62px; }
+  .corner-logo{ top:60px; max-height:56px; max-width:112px; }
+  .corner-logo.left{ left:12px; }
+  .corner-logo.right{ right:12px; }
+  .team-name{ max-width:76vw; }
+  .timestamp-row{ width:min(72vw,620px); }
+  body.scores-on #mainView{ padding-top:66px; padding-bottom:50px; }
+}
+@media (max-width:820px) {
   .corner-logo{ display:none; }
   #roomBadge{ top:max(10px,env(safe-area-inset-top)); right:10px; max-width:calc(100vw - 68px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #settingsBtn{ top:max(10px,env(safe-area-inset-top)); left:10px; width:40px; height:40px; }
@@ -172,6 +181,12 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
   #tapOverlay .brand,#roomEntryOverlay .brand{ font-size:clamp(18px,6vw,26px); }
   #statusBar{ left:10px; bottom:max(8px,env(safe-area-inset-bottom)); max-width:calc(100vw - 20px); }
   #statusTxt{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+}
+@media (min-width:600px) and (max-width:820px) {
+  #mainView{ padding-left:28px; padding-right:28px; }
+  .timestamp-row{ width:min(78vw,560px); }
+  .score-row{ max-width:560px; }
+  #settingsPanel{ width:min(360px,calc(100vw - 20px)); }
 }
 @media (max-width:380px) {
   .timestamp-chip{ flex-basis:130px; min-width:125px; padding:7px 8px; }
