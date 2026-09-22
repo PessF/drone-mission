@@ -165,10 +165,21 @@ async function testController(){
   vm.runInContext("teamName='Bravo'; activeDataTeam='Bravo'; curRound=1; phase='done'; doneReason='completed'; autonomousTimeMs=1000; manualTimeMs=2000",browser.context);
   browser.context.saveRound();
   await flushPromises();
-  const finalSave=updates.at(-1);
+  const finalSave=updates.find(u=>Object.keys(u).some(key=>key.startsWith('teams_rounds/')));
+  assert.ok(finalSave, 'expected a teams_rounds/ write among the Firebase updates');
   assert.ok(Object.keys(finalSave).some(key=>key.startsWith('teams_rounds/')&&key.endsWith('/round1')));
   assert.ok(Object.keys(finalSave).some(key=>key.startsWith('record_history/')));
   assert.ok(Object.entries(finalSave).some(([key,value])=>key.startsWith('drafts/')&&value===null));
+
+  // After a successful save the console should clear the team name/score so the
+  // next team can be scored right away.
+  const clearTeamUpdate=updates.at(-1);
+  assert.equal(clearTeamUpdate.team.name, '');
+  assert.equal(vm.runInContext('teamName', browser.context), '');
+  assert.equal(browser.element('teamNameInput').value, '');
+  assert.equal(browser.element('scoreAuto').value, 0);
+  assert.equal(browser.element('scoreManual').value, 0);
+  assert.equal(vm.runInContext('phase', browser.context), 'idle');
 
   vm.runInContext("roomRef=null; myRoom='1234'; teamName='Offline Team'; activeDataTeam='Offline Team'; curRound=2; phase='idle'",browser.context);
   browser.element('scoreAuto').value='17';
@@ -179,6 +190,23 @@ async function testController(){
   browser.context.loadRoundIntoInputs(2);
   assert.equal(browser.element('scoreAuto').value,17);
   assert.equal(browser.element('scoreManual').value,29);
+}
+
+async function testPasswordGate(){
+  const browser = createBrowserContext();
+  loadMainScript('index.html', browser);
+  browser.element('screenRoom').classList.add('active');
+  browser.element('roomInput').value = '1234';
+  browser.element('roomPassword').value = '0000';
+  await browser.context.joinRoom();
+  assert.ok(browser.element('screenRoom').classList.contains('active'), 'wrong password must not leave the room screen');
+  assert.ok(!browser.element('app').classList.contains('active'), 'wrong password must not unlock the app');
+  assert.equal(browser.element('roomPassword').value, '', 'wrong password should be cleared from the field');
+
+  browser.element('roomPassword').value = '2877';
+  await browser.context.joinRoom();
+  assert.ok(!browser.element('screenRoom').classList.contains('active'), 'correct password should leave the room screen');
+  assert.ok(browser.element('app').classList.contains('active'), 'correct password should unlock the app');
 }
 
 function testDisplay(){
@@ -216,6 +244,7 @@ function testDocumentIntegrity(){
 
 (async()=>{
   testDocumentIntegrity();
+  await testPasswordGate();
   await testController();
   testDisplay();
   console.log('Smoke tests passed');

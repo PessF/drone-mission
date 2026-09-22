@@ -329,6 +329,14 @@ table.rounds-table td.team-cell { text-align:left; font-weight:700; }
       <small>ใช้แยกแต่ละสนามที่แข่งพร้อมกัน — กรรมการและจอแสดงผลของสนามเดียวกันต้องใช้รหัสเดียวกัน</small>
     </div>
 
+    <div class="form-group">
+      <label>รหัสผ่านกรรมการ / Judge Password</label>
+      <input id="roomPassword" type="password" inputmode="numeric" maxlength="4" placeholder="••••"
+        style="letter-spacing:6px;font-weight:800;font-size:22px;text-align:center"
+        oninput="this.value=this.value.replace(/[^0-9]/g,'')" onkeydown="if(event.key==='Enter')joinRoom()" />
+      <small id="roomPasswordError" style="display:none;color:var(--red);font-weight:700">รหัสผ่านไม่ถูกต้อง</small>
+    </div>
+
     <button class="btn-full gold" onclick="joinRoom()">เข้าสู่ห้องแข่งขัน</button>
     <div style="height:8px"></div>
     <button class="btn-full outline" onclick="window.open('display.html'+(document.getElementById('roomInput').value?('?room='+document.getElementById('roomInput').value):''),'_blank')"><svg class="icon"><use href="#i-monitor"></use></svg>เปิดหน้าจอแสดงผล (Display)</button>
@@ -527,11 +535,24 @@ let loadedRoundSnapshot = null;
 function nowMs(){ return Date.now() + serverTimeOffsetMs; }
 
 /* ── Room / init ── */
+const JUDGE_PASSWORD = '2877';
 function genRoomCode(){ document.getElementById('roomInput').value = String(Math.floor(1000+Math.random()*9000)); }
 
 async function joinRoom(){
   const code = document.getElementById('roomInput').value.trim();
   if(!/^\d{4}$/.test(code)){ toast('กรุณากรอกรหัสสนาม 4 หลัก'); return; }
+  const passInput = document.getElementById('roomPassword');
+  const passErr = document.getElementById('roomPasswordError');
+  const pass = (passInput.value || '').trim();
+  if(pass !== JUDGE_PASSWORD){
+    passErr.style.display = 'block';
+    toast('รหัสผ่านไม่ถูกต้อง');
+    passInput.value = '';
+    passInput.focus();
+    return;
+  }
+  passErr.style.display = 'none';
+  passInput.value = '';
   myRoom = code;
   document.getElementById('screenRoom').classList.remove('active');
   document.getElementById('app').classList.add('active');
@@ -922,7 +943,7 @@ function pauseResumeTimer(){
   else { runTimer(); }
   updateActionButton();
 }
-function resetPhase(){
+function resetPhase(silent){
   if(countdownIv){ clearInterval(countdownIv); countdownIv=null; }
   countdownDeadlineMs=0;
   haltTimer();
@@ -930,7 +951,22 @@ function resetPhase(){
   loadedRoundSnapshot=null;
   resetScoreInputs(false);
   pushTimerState(); renderTimer(); updateActionButton(); updateTimestampUI();
-  toast(ic('rotate')+'รีเซ็ตเวลาและคะแนนแล้ว');
+  if(!silent) toast(ic('rotate')+'รีเซ็ตเวลาและคะแนนแล้ว');
+}
+
+/* Clears team name + score + timer after a round is saved, so the console is ready for the next team. */
+function resetForNewRound(){
+  clearTimeout(teamNameDebounce); teamNameDebounce=null;
+  resetPhase(true);
+  teamName=''; activeDataTeam='';
+  const nameInput=document.getElementById('teamNameInput');
+  if(nameInput) nameInput.value='';
+  if(roomRef){
+    roomRef.update({team:{name:'',updatedAt:firebase.database.ServerValue.TIMESTAMP},'timer/team':''})
+      .then(()=>markDatabaseSuccess()).catch(error=>reportDatabaseError(error,'clear team for new round'));
+  }
+  setRecordStatus('','กรอกชื่อทีมใหม่เพื่อเริ่มรอบต่อไป');
+  if(nameInput) nameInput.focus();
 }
 
 
@@ -1169,6 +1205,7 @@ function saveRound(){
       markDatabaseSuccess();
       setRecordStatus('saved','บันทึกคะแนน Round '+savedRound+' และเก็บประวัติแก้ไขแล้ว');
       toast(ic('save')+'บันทึกคะแนน Round '+savedRound+' แล้ว');
+      resetForNewRound();
     })
     .catch(e=>{ reportDatabaseError(e,'save round'); toast('ยังส่ง Firebase ไม่สำเร็จ — มีสำเนารอส่งอยู่ในเครื่อง'); })
     .finally(()=>{
