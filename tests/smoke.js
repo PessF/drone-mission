@@ -29,13 +29,14 @@ function createBrowserContext(search=''){
     if(!elements.has(id)) elements.set(id, {
       id, value:'0', textContent:'', innerHTML:'', className:'', disabled:false,
       src:'asset.mp3', style:{}, classList:new FakeClassList(),
-      focus(){}, pause(){}, play(){ return Promise.resolve(); }
+      focus(){}, pause(){}, play(){ return Promise.resolve(); }, replaceChildren(){}, appendChild(){},
     });
     return elements.get(id);
   };
   const document = {
     activeElement:{id:''}, body:element('body'), documentElement:{dataset:{}}, visibilityState:'visible',
     getElementById:element,
+    createElement:tag=>({tagName:tag.toUpperCase(),value:'',textContent:'',className:'',style:{},appendChild(){}}),
     addEventListener(){},
   };
   const firebaseDatabase = ()=>({});
@@ -89,6 +90,10 @@ async function testController(){
   assert.equal(browser.context.clamp50(-3), 0);
   assert.equal(browser.context.clamp50(87), 50);
   assert.equal(browser.context.formatMissionTime(61_230), '01:01.23');
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(browser.context.namesFromRosterCsv('rank,team_name,score\n1,"Team, A",50\n2,Team B,40\n3,Team B,30'))),
+    ['Team, A','Team B']
+  );
 
   browser.element('scoreAuto').value = '81';
   browser.element('scoreManual').value = '-4';
@@ -131,6 +136,10 @@ async function testController(){
   };
   browser.context.testRoomRef = fakeRoomRef;
   vm.runInContext("roomRef=testRoomRef; phase='idle'; teamName=''; activeDataTeam=''", browser.context);
+  await browser.context.importTeamCsv({files:[{text:async()=>"team_code,team_name,school\nA1,Alpha,School A\nB2,Beta,School B"}],value:'teams.csv'});
+  await flushPromises();
+  assert.deepEqual(JSON.parse(JSON.stringify(writes.find(([key])=>key==='roster')[1])), ['Alpha','Beta']);
+  assert.equal(browser.element('teamRosterInput').value, 'Alpha\nBeta');
   browser.context.onTeamNameInput('Bravo');
   browser.scheduled.at(-1)();
   await flushPromises();
@@ -203,7 +212,7 @@ async function testPasswordGate(){
   assert.ok(!browser.element('app').classList.contains('active'), 'wrong password must not unlock the app');
   assert.equal(browser.element('roomPassword').value, '', 'wrong password should be cleared from the field');
 
-  browser.element('roomPassword').value = '2877';
+  browser.element('roomPassword').value = '7777';
   await browser.context.joinRoom();
   assert.ok(!browser.element('screenRoom').classList.contains('active'), 'correct password should leave the room screen');
   assert.ok(browser.element('app').classList.contains('active'), 'correct password should unlock the app');

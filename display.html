@@ -6,13 +6,14 @@
 <title>EasyKids Drone Mission – Display</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="favicon.ico?v=20260925" sizes="any">
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+Thai:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <style>
 :root {
@@ -70,7 +71,7 @@ body{
 .phase-lbl.connect{ background:rgba(230,81,0,.22); color:#ffb74d; }
 .phase-lbl.connect_paused{ background:rgba(255,213,79,.2); color:var(--gold); }
 .phase-lbl.match{ background:rgba(46,125,50,.22); color:#81c784; }
-.phase-lbl.idle{ background:rgba(255,255,255,.08); color:var(--muted); }
+.phase-lbl.idle{ background:rgba(125,211,252,.16); border-color:rgba(125,211,252,.48); color:#7dd3fc; }
 .phase-lbl.done{ background:rgba(255,213,79,.18); color:var(--gold); }
 .phase-lbl.countdown{ background:rgba(140,91,255,.25); color:#c4b0ff; }
 
@@ -90,6 +91,10 @@ body{
 .timestamp-chip.done{border-color:rgba(105,240,174,.5);color:var(--green);}
 .timestamp-chip strong{display:block;font-size:clamp(18px,2.4vw,30px);font-variant-numeric:tabular-nums;color:var(--text);margin-top:2px;}
 .timestamp-chip.done strong{color:var(--green);}
+.timestamp-chip.autonomous { border-color:rgba(100,181,246,.38); color:#64b5f6; }
+.timestamp-chip.autonomous.done strong { color:#64b5f6; }
+.timestamp-chip.manual { border-color:rgba(192,132,252,.38); color:#c084fc; }
+.timestamp-chip.manual.done strong { color:#c084fc; }
 
 /* Score reveal */
 #scorePanel{ display:none; width:100%; flex-direction:column; align-items:center; }
@@ -101,6 +106,7 @@ body{
 .score-item.autonomous .sv{ color:var(--accent-2); }
 .score-item.manual .sv{ color:var(--accent); }
 .score-item .sl{ font-size:clamp(12px,1.6vw,18px); color:var(--muted); font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-top:6px; }
+.score-item .sv::after,.score-total-big .sv::after{content:' Points';font-size:.22em;font-weight:700;letter-spacing:0;vertical-align:middle;white-space:nowrap;}
 .score-total-big{ text-align:center; }
 .score-total-big .sv{ font-family:"Prompt",sans-serif; font-size:clamp(60px,12vw,150px); font-weight:900; color:var(--gold);
   text-shadow:0 0 40px rgba(255,213,79,.4); transition:transform .15s; }
@@ -220,13 +226,91 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
   #settingsBtn,#roomEntrySubmit,.tap-btn,#settingsPanel button{ touch-action:manipulation; min-height:44px; }
 }
 
+/* Drone Mission display theme. */
+body { font-family:"Inter","Noto Sans Thai",sans-serif; background:radial-gradient(ellipse at 50% 20%,#421c62 0%,#211032 42%,#10091e 78%,#090615 100%); color:#fff; }
+button,input { font-family:"Inter","Noto Sans Thai",sans-serif; }
+.display-brand-bar { position:fixed; inset:0 0 auto; z-index:40; min-height:92px; display:flex; align-items:center; justify-content:center; padding:12px 175px; border-bottom:1px solid rgba(202,145,245,.22); background:rgba(30,10,51,.82); text-align:center; }
+.display-brand-bar .eyebrow { margin:0; color:#c39bd3; font-size:clamp(10px,1.2vw,14px); letter-spacing:.1em; }
+.display-brand-bar .brand { margin:2px 0 0; color:#fff; background:none; font-size:clamp(18px,2vw,29px); letter-spacing:0; line-height:1.2; }
+.corner-logo { top:16px; z-index:55; max-width:125px; max-height:54px; }
+.corner-logo.left { left:18px; }
+.corner-logo.right { right:18px; }
+#roomBadge { top:46px; right:160px; z-index:60; transform:translateY(-50%); max-width:155px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#69f0ae; background:rgba(255,255,255,.05); }
+#settingsBtn { top:auto; right:18px; bottom:16px; left:auto; background:rgba(255,255,255,.08); }
+#settingsPanel { top:auto; right:18px; bottom:62px; left:auto; background:#171a24; }
+#mainView { padding-top:116px; }
+#mainView>.eyebrow { display:none; }
+.phase-lbl { border:1px solid rgba(255,255,255,.14); border-radius:999px; font-size:clamp(12px,1.2vw,16px); letter-spacing:.06em; }
+.team-name { text-shadow:none; }
+.big-timer { font-family:"Inter",sans-serif; font-weight:900; letter-spacing:0; line-height:.9; text-shadow:0 0 55px rgba(192,132,252,.42); }
+.big-timer .timer-ms { font:inherit; }
+.round-lbl { letter-spacing:.04em; }
+.timestamp-chip { background:rgba(139,72,190,.14); border-radius:14px; }
+.score-item { min-width:clamp(130px,19vw,250px); padding:14px 18px; border:1px solid rgba(202,145,245,.23); border-radius:18px; background:rgba(139,72,190,.14); }
+.score-item .sv,.score-total-big .sv { font-family:"Inter",sans-serif; font-variant-numeric:tabular-nums; }
+.score-item.autonomous .sv { color:#64b5f6; }
+.score-item.manual .sv { color:#c084fc; }
+.score-total-big .sv { color:#ffd166; }
+#tapOverlay,#roomEntryOverlay { background:radial-gradient(circle at 50% 35%,#64208a,#210d37 58%,#0b0618 100%); }
+.entry-logo { width:min(190px,48vw); max-height:118px; object-fit:contain; margin-bottom:18px; }
+#tapOverlay .eyebrow,#roomEntryOverlay .eyebrow { color:#c39bd3; font-size:clamp(10px,1.2vw,14px); letter-spacing:.12em; }
+#tapOverlay .brand,#roomEntryOverlay .brand { margin:5px 0 22px; background:none; color:#fff; font-size:clamp(28px,5vw,56px); letter-spacing:0; line-height:1.18; }
+.tap-btn,#roomEntrySubmit { border-radius:999px; background:linear-gradient(135deg,#7c1fa2,#d03deb); color:#fff; box-shadow:0 10px 28px rgba(156,39,176,.35); }
+#roomCodeInput { background:rgba(255,255,255,.07); }
+@media (max-width:1100px) {
+  .corner-logo.right { display:none; }
+  .display-brand-bar { padding-inline:110px 155px; }
+  #roomBadge { right:18px; }
+}
+@media (max-width:820px) {
+  .corner-logo.left { display:block; max-width:76px; max-height:40px; top:14px; left:10px; }
+  .display-brand-bar { min-height:78px; padding:8px 102px 8px 86px; }
+  .display-brand-bar .eyebrow { display:none; }
+  .display-brand-bar .brand { font-size:clamp(12px,3.3vw,18px); }
+  #roomBadge { top:39px; right:8px; max-width:88px; padding:5px 7px; font-size:9px; }
+  #mainView { padding-top:95px; }
+}
+@media (max-height:620px) { #mainView { padding-top:94px; } }
+
+/* Keep timer, timestamps, and scores in one centered competition stack. */
+body { justify-content:flex-start; }
+#mainView { width:min(1100px,100%); max-width:1100px; min-height:100dvh; margin:0 auto; padding:108px 20px 42px; justify-content:center; }
+#timerView { width:min(820px,100%); }
+.phase-lbl { margin-bottom:10px; }
+.team-name,body.scores-on .team-name { max-width:100%; margin-bottom:8px; font-size:clamp(21px,3vw,42px); line-height:1.25; }
+.big-timer { font-size:clamp(64px,12vw,164px); }
+body.scores-on .big-timer { font-size:clamp(54px,9vw,112px); }
+.round-lbl,body.scores-on .round-lbl { margin:8px 0 0; font-size:clamp(13px,1.6vw,18px); }
+.timestamp-row { width:min(760px,100%); display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:14px auto 0; }
+.timestamp-chip { min-width:0; max-width:none; padding:10px 14px; }
+.timestamp-chip strong { font-size:clamp(18px,2.4vw,29px); }
+#scorePanel.show { width:min(760px,100%); display:flex; margin-top:16px; }
+.score-row,body.scores-on .score-row { width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:0; }
+.score-item { min-width:0; padding:12px; }
+.score-item .sv,body.scores-on .score-item .sv { font-size:clamp(42px,6vw,72px); line-height:1; }
+.score-item .sl { margin-top:4px; font-size:clamp(12px,1.4vw,16px); }
+.score-total-big { width:100%; margin-top:12px; padding:10px 14px; border:1px solid rgba(202,145,245,.27); border-radius:18px; background:rgba(139,72,190,.18); }
+.score-total-big .sv,body.scores-on .score-total-big .sv { font-size:clamp(52px,8vw,94px); line-height:1; }
+.score-total-big .sl { font-size:clamp(12px,1.4vw,16px); letter-spacing:.05em; }
+.phase-lbl.idle { background:rgba(192,132,252,.2); border-color:rgba(216,180,254,.55); color:#e9d5ff; }
+#roomBadge,#statusBar { background:rgba(89,37,130,.35); border-color:rgba(202,145,245,.25); }
+#countdownOverlay { background:radial-gradient(circle at center,rgba(82,24,118,.96),rgba(12,6,26,.98) 72%); }
+@media (max-width:820px) { #mainView { padding:92px 12px 40px; } }
+@media (max-height:700px) { #mainView { justify-content:flex-start; } .timestamp-row { margin-top:8px; } #scorePanel.show { margin-top:8px; } }
+@media (max-width:480px) { .timestamp-row,.score-row,body.scores-on .score-row { gap:7px; } .timestamp-chip,.score-item { padding:8px; } }
+
 /* Icon system (replaces emoji) */
 .icon{ width:1em; height:1em; display:inline-block; vertical-align:-0.15em; margin-right:.4em;
   stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
 .icon.icon-only{ margin-right:0; }
+
+/* Display controls use the same action colors as the referee page. */
+#settingsBtn { background:#512366; border-color:#9c59bd; color:#fff; }
+#settingsPanel .snd-test button:first-child { background:#1565c0; border-color:#3889df; color:#fff; }
+#settingsPanel .snd-test button:last-child { background:#a66311; border-color:#d18b2a; color:#fff; }
 </style>
 </head>
-<body>
+<body class="scores-on">
 
 <svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
 <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17h.01"/></symbol>
@@ -240,24 +324,27 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
 <div id="connBanner"><svg class="icon"><use href="#i-alert"></use></svg>ขาดการเชื่อมต่อ กำลังพยายามเชื่อมต่อใหม่...</div>
 
 <div id="tapOverlay" onclick="startDisplay()">
-  <div class="eyebrow">EasyKids Robotics</div>
+  <img class="entry-logo" src="logos/easykids-logo-white.png" alt="EasyKids Robotics">
+  <div class="eyebrow">EASYKIDS ROBOTICS COMPETITION</div>
   <div class="brand">DRONE MISSION CHALLENGE</div>
   <div class="tap-btn"><svg class="icon"><use href="#i-play"></use></svg>แตะเพื่อเริ่มแสดงผล</div>
 </div>
 
 <div id="roomEntryOverlay">
-  <div class="eyebrow">EasyKids Robotics</div>
+  <img class="entry-logo" src="logos/easykids-logo-white.png" alt="EasyKids Robotics">
+  <div class="eyebrow">EASYKIDS ROBOTICS COMPETITION</div>
   <div class="brand">DRONE MISSION CHALLENGE</div>
-  <div class="prompt-lbl">กรอกรหัสสนาม (Room Code) เพื่อเข้าใช้งาน</div>
-  <input id="roomCodeInput" type="text" inputmode="numeric" maxlength="4" placeholder="เช่น 1234"
+  <div class="prompt-lbl">Room (ตัวเลข 4 หลัก)</div>
+  <input id="roomCodeInput" type="text" inputmode="numeric" maxlength="4" value="2401" placeholder="Room"
     oninput="this.value=this.value.replace(/[^0-9]/g,'')"
     onkeydown="if(event.key==='Enter') submitRoomCode()" />
-  <button id="roomEntrySubmit" onclick="submitRoomCode()">เข้าสู่ระบบ</button>
+  <button id="roomEntrySubmit" onclick="submitRoomCode()">เปิด Display</button>
   <div id="roomCodeError">กรุณากรอกรหัสสนาม 4 หลัก</div>
 </div>
 
-<img id="logoLeft" class="corner-logo left" src="logos/logo-left.png" alt="" onerror="this.style.display='none'" />
-<img id="logoRight" class="corner-logo right" src="logos/logo-right.png" alt="" onerror="this.style.display='none'" />
+<img id="logoLeft" class="corner-logo left" src="logos/easykids-competition.png" alt="EasyKids Robotics Competition" onerror="this.style.display='none'" />
+<img id="logoRight" class="corner-logo right" src="logos/easykids-logo-white.png" alt="EasyKids Robotics" onerror="this.style.display='none'" />
+<header class="display-brand-bar"><div><p class="eyebrow">EASYKIDS ROBOTICS COMPETITION</p><h1 class="brand">DRONE MISSION CHALLENGE</h1></div></header>
 
 <button id="settingsBtn" onclick="toggleSettings()"><svg class="icon icon-only"><use href="#i-settings"></use></svg></button>
 <div id="settingsPanel">
@@ -283,34 +370,34 @@ body.scores-on .score-total-big .sv{ font-size:clamp(42px,8vw,96px); }
 <audio id="countAudio" src="sounds/countdown.mp3" preload="auto"></audio>
 <audio id="whistleAudio" src="sounds/whistle.mp3" preload="auto"></audio>
 
-<div id="roomBadge">ROOM: ——</div>
+<div id="roomBadge">Room ——</div>
 
 <div id="mainView" style="display:none;flex-direction:column;align-items:center">
   <div class="eyebrow">EasyKids Robotics · Drone Mission Challenge</div>
-  <span class="phase-lbl idle" id="phaseLbl">พร้อมเริ่ม</span>
-  <div class="team-name" id="teamNameDisp">— ทีม —</div>
+  <span class="phase-lbl idle" id="phaseLbl">READY</span>
+  <div class="team-name" id="teamNameDisp">WAITING FOR TEAM</div>
 
   <div id="timerView">
     <div class="big-timer" id="bigTimer">02:00<span class="timer-ms">.00</span></div>
     <div class="round-lbl" id="roundLbl">ROUND 1</div>
     <div class="timestamp-row">
-      <div class="timestamp-chip" id="autoStampDisp">AUTONOMOUS<strong>—</strong></div>
-      <div class="timestamp-chip" id="manualStampDisp">MANUAL<strong>—</strong></div>
+      <div class="timestamp-chip autonomous" id="autoStampDisp">AUTONOMOUS<strong>—</strong></div>
+      <div class="timestamp-chip manual" id="manualStampDisp">MANUAL<strong>—</strong></div>
     </div>
   </div>
 
-  <div id="scorePanel">
+  <div id="scorePanel" class="show">
     <div class="score-row">
       <div class="score-item autonomous"><div class="sv" id="scoreAutoDisp">0</div><div class="sl">Autonomous</div></div>
       <div class="score-item manual"><div class="sv" id="scoreManualDisp">0</div><div class="sl">Manual</div></div>
     </div>
-    <div class="score-total-big"><div class="sv" id="scoreTotalDisp">0</div><div class="sl">คะแนนรวม</div></div>
+    <div class="score-total-big"><div class="sv" id="scoreTotalDisp">0</div><div class="sl">TOTAL SCORE</div></div>
   </div>
 </div>
 
 <div id="countdownOverlay">
   <div id="countdownNum">3</div>
-  <div id="countdownSub">เตรียมตัว</div>
+  <div id="countdownSub">GET READY</div>
 </div>
 
 <div id="statusBar"><div id="statusDot"></div><span id="statusTxt">ยังไม่เชื่อมต่อ</span></div>
@@ -402,7 +489,7 @@ function reportDisplayDatabaseError(error){
 function boot(providedRoom){
   myRoom = providedRoom || getRoomFromUrl();
   if(!/^\d{4}$/.test(myRoom || '')) return;
-  document.getElementById('roomBadge').textContent = 'ROOM: ' + myRoom;
+  document.getElementById('roomBadge').textContent = 'Room ' + myRoom;
   if(!firebase.apps.length) firebase.initializeApp(HARDCODED_CFG);
   db = firebase.database();
   roomRef = db.ref(`rooms/${myRoom}`);
@@ -419,14 +506,10 @@ function boot(providedRoom){
 
   roomRef.child('team').on('value', snap=>{
     const d = snap.val();
-    document.getElementById('teamNameDisp').textContent = (d && d.name) ? d.name : '— รอทีมถัดไป —';
+    document.getElementById('teamNameDisp').textContent = (d && d.name) ? d.name : 'WAITING FOR TEAM';
   },reportDisplayDatabaseError);
 
   roomRef.child('timer').on('value', snap=> handleTimer(snap.val()),reportDisplayDatabaseError);
-
-  roomRef.child('display/scoresVisible').on('value', snap=>{
-    togglePanels(!!snap.val());
-  },reportDisplayDatabaseError);
 
   roomRef.child('liveScore').on('value', snap=>{
     const d = snap.val();
@@ -445,12 +528,6 @@ function bumpSet(id, val){
   setTimeout(()=>el.classList.remove('bump'), 150);
 }
 
-function togglePanels(scoresVisible){
-  // ตัวจับเวลาแสดงตลอดเวลา — ปุ่มนี้ควบคุมแค่การแสดง/ซ่อนคะแนน ซึ่งจะโผล่ขึ้นมาอยู่ใต้ตัวจับเวลาแบบเรียลไทม์
-  document.body.classList.toggle('scores-on', scoresVisible);
-  document.getElementById('scorePanel').classList.toggle('show', scoresVisible);
-}
-
 function handleTimer(d){
   if(!d) return;
   const phase = d.phase || 'idle';
@@ -459,11 +536,11 @@ function handleTimer(d){
   const badge = document.getElementById('phaseLbl');
   badge.className = 'phase-lbl ' + phase;
   badge.textContent =
-    phase==='idle' ? 'พร้อมเริ่ม' :
+    phase==='idle' ? 'READY' :
     phase==='connect' ? 'Drone Setup' :
-    phase==='connect_paused' ? 'พร้อมเริ่มภารกิจ' :
+    phase==='connect_paused' ? 'READY FOR MISSION' :
     phase==='countdown' ? 'Countdown' :
-    phase==='match' ? 'Mission Run' : (d.doneReason==='timeout' ? 'Timeout' : d.doneReason==='completed' ? 'ครบทั้ง 2 ภารกิจ' : 'เสร็จสิ้น');
+    phase==='match' ? 'Mission Run' : (d.doneReason==='timeout' ? 'Timeout' : d.doneReason==='completed' ? 'MISSION COMPLETE' : 'FINISHED');
 
   document.getElementById('roundLbl').textContent = 'ROUND ' + (d.round || 1);
   renderTimestampChip('autoStampDisp','AUTONOMOUS',d.autonomousTimeMs);
@@ -480,7 +557,7 @@ function handleTimer(d){
       const numEl = document.getElementById('countdownNum');
       if(n>0){
         numEl.textContent = n; numEl.classList.remove('go');
-        document.getElementById('countdownSub').textContent = 'เตรียมพร้อม';
+        document.getElementById('countdownSub').textContent = 'GET READY';
         if(enteringFreshCountdown) playCountSound(); // เล่นครั้งเดียวตอนเริ่มนับ ไม่เล่นซ้ำทุกวินาที
       } else {
         numEl.textContent = 'GO!'; numEl.classList.add('go');
@@ -498,7 +575,7 @@ function handleTimer(d){
     playWhistleSound();
     countdownWhistlePlayed=true;
   }
-  if(previousPhase==='match' && phase==='done' && d.doneReason==='timeout') playWhistleSound();
+  if(previousPhase==='match' && phase==='done' && (d.doneReason==='timeout' || d.doneReason==='manual')) playWhistleSound();
   if(phase!=='countdown' && phase!=='match') countdownWhistlePlayed=false;
   lastPhase = phase;
 
